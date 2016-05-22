@@ -1,0 +1,44 @@
+{
+  "sections": [
+    { "name": "Front Yard Middle", "pin": 23 },
+    { "name": "Front Yard Left", "pin": 17 },
+    { "name": "Front Yard Right", "pin": 21 },
+    { "name": "Back Yard Middle", "pin": 22 },
+    { "name": "Back Yard Sauna", "pin": 25 },
+    { "name": "Garden", "pin": 24 }
+  ],
+  "programs": [
+    {
+      "name": "Main",
+      "sequence": [
+        { "section": 0, "duration": "7m" },
+        { "section": 1, "duration": "5m" },
+        { "section": 2, "duration": "3m" },
+        { "section": 3, "duration": "3m" },
+        { "section": 4, "duration": "3m" },
+        { "section": 5, "duration": "10m" }
+      ],
+      "sched": {
+        "times": [{"hour": 7, "minute": 10}, {"hour": 21, "minute": 0, "second": 0}],
+        "weekdays": [0, 1, 2, 3, 4, 5, 6]
+      },
+      "enabled": true
+    },
+    {
+      "name": "test",
+      "sequence": [
+        { "section": 0, "duration": ".5s" },
+        { "section": 1, "duration": ".5s" },
+        { "section": 2, "duration": ".5s" },
+        { "section": 3, "duration": ".5s" },
+        { "section": 4, "duration": ".5s" },
+        { "section": 5, "duration": ".5s" }
+      ],
+      "sched": {
+        "times": [{"hour": 21, "minute": 33, "second": 30}],
+        "weekdays": [0, 1, 2, 3, 4, 5, 6]
+      },
+      "enabled": true
+    }
+  ]
+}
