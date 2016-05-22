@@ -11,9 +11,9 @@ func TestSRQueue(t *testing.T) {
 	queue := newSRQueue(2)
 	ass.NotNil(queue)
 
-	item1 := &SectionRun{nil, 5 * time.Second}
-	item2 := &SectionRun{nil, 10 * time.Second}
-	item3 := &SectionRun{nil, 15 * time.Second}
+	item1 := &SectionRun{nil, 5 * time.Second, nil}
+	item2 := &SectionRun{nil, 10 * time.Second, nil}
+	item3 := &SectionRun{nil, 15 * time.Second, nil}
 
 	ass.Nil(queue.Pop(), "Pop() should be nil when empty")
 	ass.Equal(0, queue.Len(), "Len() should be 0 when empty")
