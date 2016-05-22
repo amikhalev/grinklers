@@ -6,10 +6,12 @@ import (
 	"time"
 	"os"
 	"encoding/json"
-	"math/rand"
 )
 
-var RPI bool
+var (
+	RPI bool
+	sectionValues []bool
+)
 
 func init() {
 	RPI = (os.Getenv("RPI") == "true")
@@ -20,6 +22,8 @@ func init() {
 			log.Error("error opening rpio", "err", err)
 			os.Exit(1)
 		}
+	} else {
+		sectionValues = make([]bool, 24)
 	}
 }
 
@@ -79,6 +83,7 @@ func (sec *Section) On() {
 		sec.pin.High()
 	} else {
 		sec.Debug("[stub] section on")
+		sectionValues[sec.pin - 2] = true
 	}
 	sec.onUpdate()
 }
@@ -90,6 +95,7 @@ func (sec *Section) Off() {
 		sec.pin.Input()
 	} else {
 		sec.Debug("[stub] section off")
+		sectionValues[sec.pin - 2] = false
 	}
 	sec.onUpdate()
 }
@@ -98,7 +104,7 @@ func (sec *Section) Value() rpio.State {
 	if (RPI) {
 		return sec.pin.Read()
 	} else {
-		if rand.Intn(2) == 0 {
+		if sectionValues[sec.pin - 2] {
 			return rpio.High
 		} else {
 			return rpio.Low

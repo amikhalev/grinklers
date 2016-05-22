@@ -18,7 +18,7 @@ type ConfigData struct {
 	Programs []Program
 }
 
-func createMqttOpts(broker string) (opts *mqtt.ClientOptions) {
+func createMqttOpts(broker string, cid string) (opts *mqtt.ClientOptions) {
 	uri, err := url.Parse(broker)
 	if err != nil {
 		panic(err)
@@ -32,7 +32,7 @@ func createMqttOpts(broker string) (opts *mqtt.ClientOptions) {
 		opts.SetPassword(password)
 		log.Debug("authenticating to mqtt server", "username", username, "password", password)
 	}
-	opts.SetClientID("grinklers-1")
+	opts.SetClientID(cid)
 	opts.SetWill("grinklers/connected", "false", 1, true)
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		log.Info("connected to mqtt broker")
@@ -48,7 +48,11 @@ func startMqtt() (client mqtt.Client) {
 	if broker == "" {
 		broker = "tcp://localhost:1883"
 	}
-	opts := createMqttOpts(broker)
+	cid := os.Getenv("MQTT_CID")
+	if cid == "" {
+		cid = "grinklers-1"
+	}
+	opts := createMqttOpts(broker, cid)
 	client = mqtt.NewClient(opts)
 
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
@@ -61,6 +65,7 @@ var (
 	configData ConfigData
 	mqttClient mqtt.Client
 	sectionRunner SectionRunner
+	prefix string = "grinklers"
 )
 
 func updateSections() {
@@ -68,7 +73,7 @@ func updateSections() {
 	if err != nil {
 		log.Error("error marshalling sections", "err", err)
 	}
-	token := mqttClient.Publish("grinklers/sections", 1, true, bytes)
+	token := mqttClient.Publish(prefix + "/sections", 1, true, bytes)
 	if token.Wait(); token.Error() != nil {
 		log.Error("error publishing sections", "err", token.Error())
 	}
@@ -80,7 +85,7 @@ func updatePrograms() {
 	if err != nil {
 		log.Error("error marshalling programs", "err", err)
 	}
-	token := mqttClient.Publish("grinklers/programs", 1, true, bytes)
+	token := mqttClient.Publish(prefix + "/programs", 1, true, bytes)
 	if token.Wait(); token.Error() != nil {
 		log.Error("error publishing programs", "err", token.Error())
 	}
@@ -151,7 +156,7 @@ func apiResponder(path string, handler ApiHandler) {
 }
 
 func mqttSubs() {
-	apiResponder("grinklers/runProgram", func(client mqtt.Client, message mqtt.Message) (err error) {
+	apiResponder(prefix + "/runProgram", func(client mqtt.Client, message mqtt.Message) (err error) {
 		var data struct {
 			ProgramId *int
 		}
@@ -169,7 +174,7 @@ func mqttSubs() {
 		return
 	})
 
-	apiResponder("grinklers/runSection", func(client mqtt.Client, message mqtt.Message) (err error) {
+	apiResponder(prefix + "/runSection", func(client mqtt.Client, message mqtt.Message) (err error) {
 		var data struct {
 			SectionId *int
 			Duration  *string
@@ -203,7 +208,7 @@ func mqttSubs() {
 
 func updateConnected(connected bool) (err error) {
 	str := strconv.FormatBool(connected)
-	token := mqttClient.Publish("grinklers/connected", 1, true, str)
+	token := mqttClient.Publish(prefix + "/connected", 1, true, str)
 	if token.Wait(); token.Error() != nil {
 		return token.Error()
 	}
@@ -230,8 +235,11 @@ func main() {
 
 	onSectionUpdate := make(chan *Section, 10)
 
+	sections := configData.Sections
+
 	log.Info("initing sections")
-	for _, section := range configData.Sections {
+	for i, _ := range sections {
+		section := &sections[i]
 		section.OnUpdate = onSectionUpdate
 		section.Off()
 	}
@@ -249,7 +257,8 @@ func main() {
 
 	log.Info("cleaning up...")
 	updateConnected(false)
-	for _, section := range configData.Sections {
+	for i, _ := range sections {
+		section := &sections[i]
 		section.Off()
 	}
 	Cleanup()
