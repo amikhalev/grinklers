@@ -2,5 +2,8 @@
 /.settings
 /.project
 /coverage.out
+/coverage.html
 /grinklers
+/rpi_deploy
 *.iml
+.env
