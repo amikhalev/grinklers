@@ -6,6 +6,8 @@ BINARY     = ./grinklers
 COV_OUTPUT = ./coverage.out
 COV_HTML   = ./coverage.html
 
+GO := go
+
 GO_SOURCES   := $(shell find . -type f -name '*.go' -not -name '*_test.go')
 GO_TESTS     := $(shell find . -type f -name '*_test.go')
 STATIC_FILES  = config.json
@@ -20,28 +22,31 @@ DEPLOY_PATH  ?= /home/alex/grinklers
 
 CLEAN_FILES = $(DEPLOY_DIR) $(COV_OUTPUT) $(COV_HTML)
 
-.PHONY: test clean run cover deploy
+.PHONY: all clean deps run test cover deploy
 
 all: run
 
 clean:
-	go clean
+	$(GO) clean
 	rm -rf $(CLEAN_FILES)
 
 $(BINARY): $(GO_SOURCES)
-	go build -o ${BINARY}
+	$(GO) build -o ${BINARY}
+
+deps: $(GO_SOURCES)
+	$(GO) get ./...
 
 run: $(BINARY)
 	$(BINARY)
 
 test: $(GO_SOURCES) $(GO_TESTS)
-	go test
+	$(GO) test
 
 $(COV_OUTPUT): $(GO_SOURCES) $(GO_TESTS)
-	go test -coverprofile=${COV_OUTPUT}
+	$(GO) test -coverprofile=${COV_OUTPUT}
 
 $(COV_HTML): $(COV_OUTPUT)
-	go tool cover -html=$(COV_OUTPUT) -o $(COV_HTML)
+	$(GO) tool cover -html=$(COV_OUTPUT) -o $(COV_HTML)
 
 cover: $(COV_HTML)
 #	start $(COV_HTML) || xdg-open $(COV_HTML) || open $(COV_HTML)
@@ -50,7 +55,7 @@ $(DEPLOY_DIR):
 	mkdir -p $(DEPLOY_DIR)
 
 $(DEPLOY_BINARY): $(GO_SOURCES) $(DEPLOY_DIR)
-	$(DEPLOY_ENV) go build -o $(DEPLOY_BINARY)
+	$(DEPLOY_ENV) $(GO) build -o $(DEPLOY_BINARY)
 
 $(DEPLOY_FILES): $(DEPLOY_DIR)/%: ./%
 	cp $< $@
