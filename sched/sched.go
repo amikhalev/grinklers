@@ -4,22 +4,25 @@ import (
 	"time"
 	"regexp"
 	"fmt"
-	log "github.com/inconshreveable/log15"
 	"strconv"
 )
 
 type TimeOfDay struct {
-	Hour   uint8 `json:"hour"`
-	Minute uint8 `json:"minute"`
-	Second uint8 `json:"second"`
+	Hour        int `json:"hour"`
+	Minute      int `json:"minute"`
+	Second      int `json:"second"`
+	Millisecond int `json:"millisecond"`
 }
 
 func (tod *TimeOfDay) Duration() time.Duration {
-	return time.Duration(tod.Hour) * time.Hour + time.Duration(tod.Minute) * time.Minute + time.Duration(tod.Second) * time.Second
+	return time.Duration(tod.Hour) * time.Hour +
+	time.Duration(tod.Minute) * time.Minute +
+	time.Duration(tod.Second) * time.Second +
+	time.Duration(tod.Millisecond) * time.Millisecond
 }
 
 func (t *TimeOfDay) String() string {
-	return fmt.Sprintf("%02d:%02d:%02d", t.Hour, t.Minute, t.Second)
+	return fmt.Sprintf("%02d:%02d:%02d:%02d", t.Hour, t.Minute, t.Second, t.Millisecond)
 }
 
 type Date struct {
@@ -227,7 +230,6 @@ func (p *ScheduleParser) Parse(input []byte) (sched *Schedule, err error) {
 	if err != nil {
 		return
 	}
-	log.Debug("tokenized schedule str", "tokens", p.tokens)
 	sched, err = p.parseSchedule()
 	if err != nil {
 		return
@@ -236,7 +238,6 @@ func (p *ScheduleParser) Parse(input []byte) (sched *Schedule, err error) {
 		err = parseError("tokens left over at end of schedule", p.input, p.tokens[p.nextTok].start, len(p.input))
 		return
 	}
-	log.Debug("parsed schedule", "sched", sched)
 	return
 }
 
@@ -357,7 +358,7 @@ func (p *ScheduleParser) parseTimeOfDay() (t *TimeOfDay, err error) {
 		}
 	}
 	hours %= 24
-	return &TimeOfDay{uint8(hours), uint8(minutes), uint8(seconds)}, nil
+	return &TimeOfDay{hours, minutes, seconds, 0}, nil
 }
 
 func (p *ScheduleParser) parseInt() (i int, err error) {

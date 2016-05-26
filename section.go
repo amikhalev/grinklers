@@ -1,125 +1,127 @@
 package main
 
 import (
-	"github.com/stianeikeland/go-rpio"
-	log "github.com/inconshreveable/log15"
-	"time"
-	"os"
 	"encoding/json"
+	"fmt"
+	"github.com/inconshreveable/log15"
+	"github.com/stianeikeland/go-rpio"
+	"os"
+	"time"
 )
 
+type Section interface {
+	SetState(on bool)
+	State() (on bool)
+	Name() string
+}
+
 var (
-	RPI bool
+	RPI           bool
 	sectionValues []bool
 )
 
-func init() {
+func InitSection() {
 	RPI = (os.Getenv("RPI") == "true")
-	if (RPI) {
-		log.Info("opening rpio")
+	if RPI {
+		logger.Info("opening rpio")
 		err := rpio.Open()
 		if err != nil {
-			log.Error("error opening rpio", "err", err)
-			os.Exit(1)
+			panic(fmt.Errorf("error opening rpio: %v", err))
 		}
 	} else {
 		sectionValues = make([]bool, 24)
 	}
 }
 
-func Cleanup() {
-	rpio.Close()
-}
-
-type Section struct {
-	Name     string
-	pin      rpio.Pin
-	OnUpdate chan *Section
-	log.Logger
-}
-
-func NewSection(name string, pin rpio.Pin) Section {
-	return Section{
-		name, pin,
-		nil,
-		log.New("section", name),
+func CleanupSection() {
+	if RPI {
+		rpio.Close()
+	} else {
+		sectionValues = nil
 	}
 }
 
-type sectionJson struct {
-	Name  string `json:"name"`
-	Pin   rpio.Pin `json:"pin"`
-	Value rpio.State `json:"value"`
+type RpioSection struct {
+	name     string
+	pin      rpio.Pin
+	OnUpdate chan<- *RpioSection
+	log15.Logger
 }
 
-func (sec *Section) UnmarshalJSON(b []byte) (err error) {
-	var d sectionJson
+var _ Section = (*RpioSection)(nil)
+
+func NewRpioSection(name string, pin rpio.Pin) RpioSection {
+	return RpioSection{
+		name, pin,
+		nil,
+		logger.New("section", name),
+	}
+}
+
+type rpioSectionJson struct {
+	Name  string   `json:"name"`
+	Pin   rpio.Pin `json:"pin"`
+	State bool     `json:"state"`
+}
+
+func (sec *RpioSection) UnmarshalJSON(b []byte) (err error) {
+	var d rpioSectionJson
 	if err = json.Unmarshal(b, &d); err == nil {
-		*sec = NewSection(d.Name, d.Pin)
+		*sec = NewRpioSection(d.Name, d.Pin)
 	}
 	return
 }
 
-func (sec *Section) MarshalJSON() ([]byte, error) {
-	d := sectionJson{
-		sec.Name, sec.pin, sec.Value(),
+func (sec *RpioSection) MarshalJSON() ([]byte, error) {
+	d := rpioSectionJson{
+		sec.name, sec.pin, sec.State(),
 	}
 	return json.Marshal(&d)
 }
 
-func (sec *Section) onUpdate() {
+func (sec *RpioSection) onUpdate() {
 	if sec.OnUpdate != nil {
-		sec.Debug("sending update")
 		sec.OnUpdate <- sec
-	} else {
-		sec.Debug("OnUpdate nil!")
 	}
 }
 
-func (sec *Section) On() {
-	if (RPI) {
-		sec.Debug("turning gpio on")
-		sec.pin.Output()
-		sec.pin.High()
-	} else {
-		sec.Debug("[stub] section on")
-		sectionValues[sec.pin - 2] = true
-	}
-	sec.onUpdate()
-}
-
-func (sec *Section) Off() {
-	if (RPI) {
-		sec.Debug("turning gpio off")
-		sec.pin.Low()
-		sec.pin.Input()
-	} else {
-		sec.Debug("[stub] section off")
-		sectionValues[sec.pin - 2] = false
-	}
-	sec.onUpdate()
-}
-
-func (sec *Section) Value() rpio.State {
-	if (RPI) {
-		return sec.pin.Read()
-	} else {
-		if sectionValues[sec.pin - 2] {
-			return rpio.High
+func (sec *RpioSection) SetState(on bool) {
+	if RPI {
+		sec.Debug("setting section state", "on", on)
+		if on {
+			sec.pin.Output()
+			sec.pin.High()
 		} else {
-			return rpio.Low
+			sec.pin.Low()
+			sec.pin.Input()
 		}
+	} else {
+		sec.Debug("[stub] setting section state", "on", on)
+		sectionValues[sec.pin-2] = on
+	}
+	sec.onUpdate()
+}
+
+func (sec *RpioSection) State() bool {
+	if RPI {
+		return sec.pin.Read() == rpio.High
+	} else {
+		return sectionValues[sec.pin-2]
 	}
 }
 
-func (s *Section) Cancel() {
+func (sec *RpioSection) Name() string {
+	return sec.name
+}
+
+func (s *RpioSection) Cancel() {
 	sectionRunner.CancelSection(s)
 }
 
-func (s *Section) RunForAsync(dur time.Duration) (<-chan int) {
+func (s *RpioSection) RunForAsync(dur time.Duration) <-chan int {
 	return sectionRunner.RunSectionAsync(s, dur)
 }
 
-func (s *Section) RunFor(dur time.Duration) {
+func (s *RpioSection) RunFor(dur time.Duration) {
 	<-s.RunForAsync(dur)
 }

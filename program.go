@@ -1,19 +1,20 @@
 package main
 
 import (
-	"time"
-	log "github.com/inconshreveable/log15"
 	"encoding/json"
 	"github.com/amikhalev/grinklers/sched"
+	"github.com/inconshreveable/log15"
+	"time"
+	"sync"
 )
 
 type ProgItem struct {
-	Section  uint
+	Sec      Section
 	Duration time.Duration
 }
 
 type progItemJson struct {
-	Section  uint `json:"section"`
+	Section  uint   `json:"section"`
 	Duration string `json:"duration"`
 }
 
@@ -25,13 +26,13 @@ func (pi *ProgItem) UnmarshalJSON(b []byte) (err error) {
 		if err != nil {
 			return
 		}
-		*pi = ProgItem{data.Section, dur}
+		*pi = ProgItem{&configData.Sections[data.Section], dur}
 	}
 	return
 }
 
 func (pi *ProgItem) MarshalJSON() (b []byte, err error) {
-	data := progItemJson{pi.Section, pi.Duration.String()}
+	data := progItemJson{0, pi.Duration.String()}
 	b, err = json.Marshal(&data)
 	return
 }
@@ -40,7 +41,7 @@ type ProgRunnerMsg int
 
 const (
 	PR_QUIT ProgRunnerMsg = iota
-	PR_STOP
+	PR_CANCEL
 	PR_REFRESH
 	PR_RUN
 )
@@ -50,51 +51,102 @@ type Program struct {
 	Sequence []ProgItem
 	Sched    sched.Schedule
 	Enabled  bool
+	mutex    *sync.Mutex
 	running  bool
 	runner   chan ProgRunnerMsg
-	log.Logger
+	OnUpdate chan <- *Program
+	log15.Logger
 }
 
 func NewProgram(name string, sequence []ProgItem, schedule sched.Schedule, enabled bool) Program {
 	runner := make(chan ProgRunnerMsg)
 	prog := Program{
 		name, sequence, schedule, enabled,
-		false, runner,
-		log.New("program", name),
+		&sync.Mutex{}, false, runner, nil,
+		logger.New("program", name),
 	}
-	go prog.start()
 	return prog
 }
 
+type ProgramJson struct {
+	Name     string         `json:"name"`
+	Sequence []ProgItem     `json:"sequence"`
+	Sched    sched.Schedule `json:"sched"`
+	Enabled  bool           `json:"enabled"`
+	Running  *bool          `json:"running,omitempty"`
+}
+
+func (prog *Program) UnmarshalJSON(b []byte) (err error) {
+	var p ProgramJson
+	if err = json.Unmarshal(b, &p); err == nil {
+		*prog = NewProgram(p.Name, p.Sequence, p.Sched, p.Enabled)
+	}
+	return
+}
+
+func (prog *Program) MarshalJSON() (b []byte, err error) {
+	p := ProgramJson{prog.Name, prog.Sequence, prog.Sched, prog.Enabled, &prog.running}
+	b, err = json.Marshal(&p)
+	return
+}
+
+func (prog *Program) lock() {
+	prog.mutex.Lock()
+}
+
+func (prog *Program) unlock() {
+	prog.mutex.Unlock()
+}
+
+func (prog *Program) onUpdate() {
+	if prog.OnUpdate != nil {
+		prog.Debug("prog.onUpdate()")
+		prog.OnUpdate <- prog
+	} else {
+		prog.Warn("OnUpdate is nil!", "onUpdate", prog.OnUpdate)
+	}
+}
+
 func (prog *Program) run(cancel <-chan int) {
-	sections := configData.Sections
-	prog.running = true
+	if prog.Running() {
+		return
+	}
 	prog.Info("running program")
-	for _, item := range prog.Sequence {
-		sec := sections[item.Section]
-		secDone := sec.RunForAsync(item.Duration)
+	prog.setRunning(true)
+	prog.onUpdate()
+	stop := func() {
+		prog.setRunning(false)
+		prog.onUpdate()
+	}
+	prog.lock()
+	seq := prog.Sequence
+	prog.unlock()
+	for _, item := range seq {
+		secDone := sectionRunner.RunSectionAsync(item.Sec, item.Duration)
 		select {
 		case <-secDone:
 			continue
 		case <-cancel:
-			sec.Cancel()
-			log.Info("program run cancelled")
+			sectionRunner.CancelSection(item.Sec)
+			prog.Info("program run cancelled")
+			stop()
 			return
 		}
 	}
 	prog.Info("finished running program")
-	prog.running = false
+	stop()
 }
 
 func (prog *Program) start() {
 	var (
-		msg ProgRunnerMsg; nextRun *time.Time; delay <-chan time.Time
+		msg ProgRunnerMsg
+		nextRun *time.Time
+		delay   <-chan time.Time
 	)
 	cancelRun := make(chan int)
 	run := func() {
 		go prog.run(cancelRun)
 	}
-	Loop:
 	for {
 		if prog.Enabled {
 			nextRun = prog.Sched.NextRunTime()
@@ -104,21 +156,23 @@ func (prog *Program) start() {
 		if nextRun != nil {
 			dur := nextRun.Sub(time.Now())
 			delay = time.After(dur)
-			prog.Debug("progRunner(): waiting", "dur", dur)
+			prog.Debug("program scheduled", "dur", dur)
 		} else {
 			delay = nil
-			prog.Debug("progRunner(): not running. waiting for refresh", "enabled", prog.Enabled, "nextRun", nextRun)
+			prog.Debug("program not scheduled", "enabled", prog.Enabled)
 		}
+		//prog.Debug("runner waiting for command", "delay", delay)
 		select {
 		case msg = <-prog.runner:
+			prog.Debug("runner cmd", "msg", msg)
 			switch msg {
 			case PR_QUIT:
 				cancelRun <- 0
-				break Loop
-			case PR_STOP:
+				return
+			case PR_CANCEL:
 				cancelRun <- 0
 			case PR_REFRESH:
-				continue Loop
+				continue
 			case PR_RUN:
 				run()
 			}
@@ -128,40 +182,34 @@ func (prog *Program) start() {
 	}
 }
 
-type programJson struct {
-	Name     string `json:"name"`
-	Sequence []ProgItem `json:"sequence"`
-	Sched    sched.Schedule `json:"sched"`
-	Enabled  bool `json:"enabled"`
-	Running  *bool `json:"running,omitempty"`
-}
-
-func (prog *Program) UnmarshalJSON(b []byte) (err error) {
-	var p programJson;
-	if err = json.Unmarshal(b, &p); err == nil {
-		*prog = NewProgram(p.Name, p.Sequence, p.Sched, p.Enabled)
-	}
-	return
-}
-
-func (prog *Program) MarshalJSON() (b []byte, err error) {
-	p := programJson{prog.Name, prog.Sequence, prog.Sched, prog.Enabled, &prog.running};
-	b, err = json.Marshal(&p)
-	return
+func (prog *Program) Start() {
+	go prog.start()
 }
 
 func (prog *Program) Run() {
 	prog.runner <- PR_RUN
 }
 
-func (prog *Program) Stop() {
-	prog.runner <- PR_STOP
+func (prog *Program) Cancel() {
+	prog.runner <- PR_CANCEL
 }
 
 func (prog *Program) Refresh() {
 	prog.runner <- PR_REFRESH
 }
 
-func (prog *Program) Kill() {
+func (prog *Program) Quit() {
 	prog.runner <- PR_QUIT
+}
+
+func (prog *Program) setRunning(running bool) {
+	prog.lock()
+	defer prog.unlock()
+	prog.running = running
+}
+
+func (prog *Program) Running() bool {
+	prog.lock()
+	defer prog.unlock()
+	return prog.running
 }
