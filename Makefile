@@ -34,7 +34,7 @@ $(BINARY): $(GO_SOURCES)
 	$(GO) build -o ${BINARY}
 
 deps: $(GO_SOURCES)
-	$(GO) get ./...
+	$(GO) get -t ./...
 
 run: $(BINARY)
 	$(BINARY)
