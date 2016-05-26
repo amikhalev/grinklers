@@ -142,18 +142,19 @@ func (prog *Program) start() {
 		msg ProgRunnerMsg
 		nextRun *time.Time
 		delay   <-chan time.Time
-		enabled bool
 	)
 	cancelRun := make(chan int)
 	run := func() {
 		go prog.run(cancelRun)
 	}
 	for {
+		prog.lock()
 		if prog.Enabled {
 			nextRun = prog.Sched.NextRunTime()
 		} else {
 			nextRun = nil
 		}
+		prog.unlock()
 		if nextRun != nil {
 			dur := nextRun.Sub(time.Now())
 			delay = time.After(dur)
