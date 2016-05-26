@@ -142,6 +142,7 @@ func (prog *Program) start() {
 		msg ProgRunnerMsg
 		nextRun *time.Time
 		delay   <-chan time.Time
+		enabled bool
 	)
 	cancelRun := make(chan int)
 	run := func() {

@@ -1,2 +1,5 @@
 language: go
-script: go test -v ./...
+install: make deps
+script:
+  - make test
+  - make cover
