@@ -1,11 +1,11 @@
-package main
+package grinklers
 
 import (
-	"encoding/json"
-	"github.com/amikhalev/grinklers/sched"
+	. "github.com/amikhalev/grinklers/sched"
 	"github.com/inconshreveable/log15"
 	"time"
 	"sync"
+	"fmt"
 )
 
 type ProgItem struct {
@@ -13,27 +13,36 @@ type ProgItem struct {
 	Duration time.Duration
 }
 
-type progItemJson struct {
-	Section  uint   `json:"section"`
+type ProgItemJSON struct {
+	Section  int   `json:"section"`
 	Duration string `json:"duration"`
 }
 
-func (pi *ProgItem) UnmarshalJSON(b []byte) (err error) {
-	var data progItemJson
-	if err = json.Unmarshal(b, &data); err == nil {
-		var dur time.Duration
-		dur, err = time.ParseDuration(data.Duration)
-		if err != nil {
-			return
-		}
-		*pi = ProgItem{&configData.Sections[data.Section], dur}
+func (data *ProgItemJSON) ToProgItem(sections []Section) (pi *ProgItem, err error) {
+	var dur time.Duration
+	dur, err = time.ParseDuration(data.Duration)
+	if err != nil {
+		err = fmt.Errorf("error parsing ProgItem duration: %v", err)
+		return
 	}
+	if err = CheckRange(&data.Section, "section id", len(sections)); err != nil {
+		err = fmt.Errorf("invalid program item section id: %v", err)
+	}
+	pi = &ProgItem{sections[data.Section], dur}
 	return
 }
 
-func (pi *ProgItem) MarshalJSON() (b []byte, err error) {
-	data := progItemJson{0, pi.Duration.String()}
-	b, err = json.Marshal(&data)
+func (pi *ProgItem) ToJSON(sections []Section) (data *ProgItemJSON, err error) {
+	secId := -1
+	for i, sec := range sections {
+		if pi.Sec == sec {
+			secId = i
+		}
+	}
+	if secId == -1 {
+		err = fmt.Errorf("the section of this program does not exist in the sections array")
+	}
+	data = &ProgItemJSON{secId, pi.Duration.String()}
 	return
 }
 
@@ -46,10 +55,12 @@ const (
 	PR_RUN
 )
 
+type ProgSequence []ProgItem
+
 type Program struct {
 	Name     string
-	Sequence []ProgItem
-	Sched    sched.Schedule
+	Sequence ProgSequence
+	Sched    Schedule
 	Enabled  bool
 	mutex    *sync.Mutex
 	running  bool
@@ -58,35 +69,73 @@ type Program struct {
 	log15.Logger
 }
 
-func NewProgram(name string, sequence []ProgItem, schedule sched.Schedule, enabled bool) Program {
+func NewProgram(name string, sequence []ProgItem, schedule Schedule, enabled bool) *Program {
 	runner := make(chan ProgRunnerMsg)
-	prog := Program{
+	prog := &Program{
 		name, sequence, schedule, enabled,
 		&sync.Mutex{}, false, runner, nil,
-		logger.New("program", name),
+		Logger.New("program", name),
 	}
 	return prog
 }
 
-type ProgramJson struct {
-	Name     string         `json:"name"`
-	Sequence []ProgItem     `json:"sequence"`
-	Sched    sched.Schedule `json:"sched"`
-	Enabled  bool           `json:"enabled"`
-	Running  *bool          `json:"running,omitempty"`
-}
+type ProgSequenceJSON []ProgItemJSON
 
-func (prog *Program) UnmarshalJSON(b []byte) (err error) {
-	var p ProgramJson
-	if err = json.Unmarshal(b, &p); err == nil {
-		*prog = NewProgram(p.Name, p.Sequence, p.Sched, p.Enabled)
+func (seq ProgSequenceJSON) ToSequence(sections []Section) (sequence ProgSequence, err error) {
+	sequence = make(ProgSequence, len(seq))
+	var pi *ProgItem
+	for i, _ := range seq {
+		pi, err = seq[i].ToProgItem(sections)
+		if err != nil {
+			return
+		}
+		sequence[i] = *pi
 	}
 	return
 }
 
-func (prog *Program) MarshalJSON() (b []byte, err error) {
-	p := ProgramJson{prog.Name, prog.Sequence, prog.Sched, prog.Enabled, &prog.running}
-	b, err = json.Marshal(&p)
+type ProgramJSON struct {
+	Name     *string         `json:"name"`
+	Sequence ProgSequenceJSON     `json:"sequence"`
+	Sched    *Schedule `json:"sched"`
+	Enabled  *bool           `json:"enabled"`
+	Running  *bool          `json:"running,omitempty"`
+}
+
+func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
+	if err = CheckNotNil(p.Name, "name"); err != nil {
+		return
+	}
+	var sequence []ProgItem
+	if err = CheckNotNil(p.Sequence, "sequence"); err != nil {
+		return
+	} else {
+		sequence, err = p.Sequence.ToSequence(sections)
+		if err != nil {
+			return
+		}
+	}
+	if err = CheckNotNil(p.Sched, "sched"); err != nil {
+		return
+	}
+	if err = CheckNotNil(p.Enabled, "enabled"); err != nil {
+		return
+	}
+	prog = NewProgram(*p.Name, sequence, *p.Sched, *p.Enabled)
+	return
+}
+
+func (prog *Program) ToJSON(sections []Section) (data ProgramJSON, err error) {
+	sequence := make([]ProgItemJSON, len(prog.Sequence))
+	var pi *ProgItemJSON
+	for i, _ := range prog.Sequence {
+		pi, err = prog.Sequence[i].ToJSON(sections)
+		if err != nil {
+			return
+		}
+		sequence[i] = *pi
+	}
+	data = ProgramJSON{&prog.Name, sequence, &prog.Sched, &prog.Enabled, &prog.running}
 	return
 }
 
@@ -107,7 +156,7 @@ func (prog *Program) onUpdate() {
 	}
 }
 
-func (prog *Program) run(cancel <-chan int) {
+func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
 	if prog.Running() {
 		return
 	}
@@ -122,12 +171,12 @@ func (prog *Program) run(cancel <-chan int) {
 	seq := prog.Sequence
 	prog.unlock()
 	for _, item := range seq {
-		secDone := sectionRunner.RunSectionAsync(item.Sec, item.Duration)
+		secDone := secRunner.RunSectionAsync(item.Sec, item.Duration)
 		select {
 		case <-secDone:
 			continue
 		case <-cancel:
-			sectionRunner.CancelSection(item.Sec)
+			secRunner.CancelSection(item.Sec)
 			prog.Info("program run cancelled")
 			stop()
 			return
@@ -137,7 +186,7 @@ func (prog *Program) run(cancel <-chan int) {
 	stop()
 }
 
-func (prog *Program) start() {
+func (prog *Program) start(secRunner *SectionRunner) {
 	var (
 		msg ProgRunnerMsg
 		nextRun *time.Time
@@ -145,7 +194,7 @@ func (prog *Program) start() {
 	)
 	cancelRun := make(chan int)
 	run := func() {
-		go prog.run(cancelRun)
+		go prog.run(cancelRun, secRunner)
 	}
 	for {
 		prog.lock()
@@ -184,8 +233,8 @@ func (prog *Program) start() {
 	}
 }
 
-func (prog *Program) Start() {
-	go prog.start()
+func (prog *Program) Start(secRunner *SectionRunner) {
+	go prog.start(secRunner)
 }
 
 func (prog *Program) Run() {
@@ -196,7 +245,7 @@ func (prog *Program) Cancel() {
 	prog.runner <- PR_CANCEL
 }
 
-func (prog *Program) Refresh() {
+func (prog *Program) refresh() {
 	prog.runner <- PR_REFRESH
 }
 
@@ -214,4 +263,54 @@ func (prog *Program) Running() bool {
 	prog.lock()
 	defer prog.unlock()
 	return prog.running
+}
+
+func (prog *Program) Update(data ProgramJSON, sections []Section) (err error) {
+	prog.lock()
+	if data.Name != nil {
+		prog.Name = *data.Name
+	}
+	if data.Sequence != nil {
+		sequence, err := data.Sequence.ToSequence(sections)
+		if err != nil {
+			return err
+		}
+		prog.Sequence = sequence
+	}
+	if data.Sched != nil {
+		prog.Sched = *data.Sched
+	}
+	if data.Enabled != nil {
+		prog.Enabled = *data.Enabled
+	}
+	prog.unlock()
+	prog.refresh()
+	prog.onUpdate()
+	return
+}
+
+type ProgramsJSON []ProgramJSON
+
+func (progs ProgramsJSON) ToPrograms(sections []Section) (programs []Program, err error) {
+	programs = make([]Program, len(progs))
+	var p *Program
+	for i, _ := range progs {
+		p, err = progs[i].ToProgram(sections)
+		if err != nil {
+			return
+		}
+		programs[i] = *p
+	}
+	return
+}
+
+func ProgramsToJSON(programs []Program, sections []Section) (data ProgramsJSON, err error) {
+	data = make(ProgramsJSON, len(programs))
+	for i, _ := range programs {
+		data[i], err = programs[i].ToJSON(sections)
+		if err != nil {
+			return
+		}
+	}
+	return
 }

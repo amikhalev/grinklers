@@ -1,8 +1,8 @@
-package main
+package grinklers
 
 import (
 	"encoding/json"
-	"github.com/amikhalev/grinklers/sched"
+	. "github.com/amikhalev/grinklers/sched"
 	"github.com/inconshreveable/log15"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -12,12 +12,11 @@ import (
 )
 
 func TestProgram_JSON(t *testing.T) {
-	logger.SetHandler(log15.DiscardHandler())
+	Logger.SetHandler(log15.DiscardHandler())
 	ass := assert.New(t)
-	var prog Program
 
-	configData.Sections = []RpioSection{
-		RpioSection{}, RpioSection{},
+	sections := []Section{
+		&RpioSection{}, &RpioSection{},
 	}
 
 	str := `{
@@ -37,18 +36,24 @@ func TestProgram_JSON(t *testing.T) {
 	  	},
 	   	"enabled": true
 	   }`
-	err := json.Unmarshal([]byte(str), &prog)
+	var progJson ProgramJSON
+	err := json.Unmarshal([]byte(str), &progJson)
+	require.NoError(t, err)
+	prog, err := progJson.ToProgram(sections)
 	require.NoError(t, err)
 	ass.Equal("test 1234", prog.Name)
 	ass.Equal(true, prog.Enabled)
-	ass.Equal(ProgItem{&configData.Sections[0], 1*time.Hour + 2*time.Minute + 3*time.Second}, prog.Sequence[0])
-	ass.Equal(ProgItem{&configData.Sections[1], 24 * time.Millisecond}, prog.Sequence[1])
-	ass.Equal(sched.TimeOfDay{1, 2, 0, 0}, prog.Sched.Times[0])
+	ass.Equal(ProgItem{sections[0], 1*time.Hour + 2*time.Minute + 3*time.Second}, prog.Sequence[0])
+	ass.Equal(ProgItem{sections[1], 24 * time.Millisecond}, prog.Sequence[1])
+	ass.Equal(TimeOfDay{1, 2, 0, 0}, prog.Sched.Times[0])
 	ass.Contains(prog.Sched.Weekdays, time.Monday)
 	ass.Contains(prog.Sched.Weekdays, time.Wednesday)
 	ass.Contains(prog.Sched.Weekdays, time.Friday)
 
-	_, err = json.Marshal(&prog)
+	progJson, err = prog.ToJSON(sections)
+	require.NoError(t, err)
+
+	_, err = json.Marshal(&progJson)
 	require.NoError(t, err)
 }
 
@@ -56,16 +61,16 @@ func TestProgram_Run(t *testing.T) {
 	sec1 := newMockSection("sec1")
 	sec2 := newMockSection("sec2")
 
-	sectionRunner = NewSectionRunner()
+	secRunner := NewSectionRunner()
 
 	onUpdate := make(chan *Program, 10)
 
 	prog := NewProgram("test", []ProgItem{
 		ProgItem{sec1, 10 * time.Millisecond},
 		ProgItem{sec2, 10 * time.Millisecond},
-	}, sched.Schedule{}, false)
+	}, Schedule{}, false)
 	prog.OnUpdate = onUpdate
-	prog.Start()
+	prog.Start(secRunner)
 
 	sec1.On("SetState", true).Return().
 		Run(func(_ mock.Arguments) {
@@ -81,11 +86,11 @@ func TestProgram_Run(t *testing.T) {
 	prog.Run()
 
 	p := <-onUpdate
-	assert.Equal(t, &prog, p)
+	assert.Equal(t, prog, p)
 	assert.Equal(t, true, prog.running)
 
 	p = <-onUpdate
-	assert.Equal(t, &prog, p)
+	assert.Equal(t, prog, p)
 	assert.Equal(t, false, prog.running)
 
 	sec1.AssertExpectations(t)
@@ -104,19 +109,51 @@ func TestProgram_Schedule(t *testing.T) {
 	sec2.On("SetState", true).Return()
 	sec2.On("SetState", false).Return()
 
-	sectionRunner = NewSectionRunner()
+	secRunner := NewSectionRunner()
 
 	runTime := time.Now().Add(25 * time.Millisecond)
 	prog := NewProgram("test", []ProgItem{
 		ProgItem{sec1, 25 * time.Millisecond},
 		ProgItem{sec2, 25 * time.Millisecond},
-	}, sched.Schedule{
-		Times: []sched.TimeOfDay{
-			sched.TimeOfDay{runTime.Hour(), runTime.Minute(), runTime.Second(), runTime.Nanosecond() / 1000000},
+	}, Schedule{
+		Times: []TimeOfDay{
+			TimeOfDay{runTime.Hour(), runTime.Minute(), runTime.Second(), runTime.Nanosecond() / 1000000},
 		},
 		Weekdays: []time.Weekday{0, 1, 2, 3, 4, 5, 6},
 	}, true)
-	prog.Start()
+	prog.Start(secRunner)
+
+	time.Sleep(50 * time.Millisecond)
+	assert.Equal(t, true, prog.running)
+	time.Sleep(50 * time.Millisecond)
+	assert.Equal(t, false, prog.running)
+
+	prog.Quit()
+}
+
+func TestProgram_Update(t *testing.T) {
+	//logger.SetHandler(log15.StdoutHandler)
+	sec1 := newMockSection("sec1")
+	sec2 := newMockSection("sec2")
+
+	sec1.On("SetState", true).Return()
+	sec1.On("SetState", false).Return()
+	sec2.On("SetState", true).Return()
+	sec2.On("SetState", false).Return()
+
+	secRunner := NewSectionRunner()
+
+	runTime := time.Now().Add(25 * time.Millisecond)
+	prog := NewProgram("test", []ProgItem{
+		ProgItem{sec1, 25 * time.Millisecond},
+		ProgItem{sec2, 25 * time.Millisecond},
+	}, Schedule{
+		Times: []TimeOfDay{
+			TimeOfDay{runTime.Hour(), runTime.Minute(), runTime.Second(), runTime.Nanosecond() / 1000000},
+		},
+		Weekdays: []time.Weekday{0, 1, 2, 3, 4, 5, 6},
+	}, true)
+	prog.Start(secRunner)
 
 	time.Sleep(50 * time.Millisecond)
 	assert.Equal(t, true, prog.running)

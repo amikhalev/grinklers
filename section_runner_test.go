@@ -1,4 +1,4 @@
-package main
+package grinklers
 
 import (
 	"github.com/inconshreveable/log15"
@@ -26,6 +26,10 @@ func (m *MockSection) SetState(on bool) {
 
 func (m *MockSection) State() bool {
 	return m.state
+}
+
+func (m *MockSection) SetOnUpdate(onUpdate chan<- Section) {
+	m.Called(onUpdate)
 }
 
 func (m *MockSection) Name() string {
@@ -151,7 +155,7 @@ func TestSRQueue(t *testing.T) {
 type SectionRunnerSuite struct {
 	suite.Suite
 	ass  *assert.Assertions
-	sr   SectionRunner
+	sr   *SectionRunner
 	sec1 *MockSection
 	sec2 *MockSection
 }

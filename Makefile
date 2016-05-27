@@ -31,7 +31,7 @@ clean:
 	rm -rf $(CLEAN_FILES)
 
 $(BINARY): $(GO_SOURCES)
-	$(GO) build -o ${BINARY}
+	$(GO) build -o ${BINARY} ./main
 
 deps: $(GO_SOURCES)
 	$(GO) get -t ./...

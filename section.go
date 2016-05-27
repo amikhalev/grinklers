@@ -1,4 +1,4 @@
-package main
+package grinklers
 
 import (
 	"encoding/json"
@@ -6,12 +6,12 @@ import (
 	"github.com/inconshreveable/log15"
 	"github.com/stianeikeland/go-rpio"
 	"os"
-	"time"
 )
 
 type Section interface {
 	SetState(on bool)
 	State() (on bool)
+	SetOnUpdate(chan<- Section)
 	Name() string
 }
 
@@ -23,7 +23,7 @@ var (
 func InitSection() {
 	RPI = (os.Getenv("RPI") == "true")
 	if RPI {
-		logger.Info("opening rpio")
+		Logger.Info("opening rpio")
 		err := rpio.Open()
 		if err != nil {
 			panic(fmt.Errorf("error opening rpio: %v", err))
@@ -44,7 +44,7 @@ func CleanupSection() {
 type RpioSection struct {
 	name     string
 	pin      rpio.Pin
-	OnUpdate chan<- *RpioSection
+	onUpdate chan<- Section
 	log15.Logger
 }
 
@@ -54,7 +54,7 @@ func NewRpioSection(name string, pin rpio.Pin) RpioSection {
 	return RpioSection{
 		name, pin,
 		nil,
-		logger.New("section", name),
+		Logger.New("section", name),
 	}
 }
 
@@ -79,9 +79,13 @@ func (sec *RpioSection) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&d)
 }
 
-func (sec *RpioSection) onUpdate() {
-	if sec.OnUpdate != nil {
-		sec.OnUpdate <- sec
+func (sec *RpioSection) SetOnUpdate(onUpdate chan<- Section) {
+	sec.onUpdate = onUpdate
+}
+
+func (sec *RpioSection) update() {
+	if sec.onUpdate != nil {
+		sec.onUpdate <- sec
 	}
 }
 
@@ -99,7 +103,7 @@ func (sec *RpioSection) SetState(on bool) {
 		sec.Debug("[stub] setting section state", "on", on)
 		sectionValues[sec.pin-2] = on
 	}
-	sec.onUpdate()
+	sec.update()
 }
 
 func (sec *RpioSection) State() bool {
@@ -114,14 +118,19 @@ func (sec *RpioSection) Name() string {
 	return sec.name
 }
 
-func (s *RpioSection) Cancel() {
-	sectionRunner.CancelSection(s)
+type RpioSections []Section
+
+func (secs *RpioSections) UnmarshalJSON(b []byte) (err error) {
+	var s []RpioSection
+	err = json.Unmarshal(b, &s)
+	if err != nil {
+		return
+	}
+	*secs = make(RpioSections, len(s))
+	for i, _  := range s {
+		(*secs)[i] = &s[i]
+	}
+	return
 }
 
-func (s *RpioSection) RunForAsync(dur time.Duration) <-chan int {
-	return sectionRunner.RunSectionAsync(s, dur)
-}
-
-func (s *RpioSection) RunFor(dur time.Duration) {
-	<-s.RunForAsync(dur)
-}
+var _ json.Unmarshaler = (*RpioSections)(nil)

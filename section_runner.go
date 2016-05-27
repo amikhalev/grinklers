@@ -1,4 +1,4 @@
-package main
+package grinklers
 
 import (
 	"fmt"
@@ -85,10 +85,10 @@ type SectionRunner struct {
 	log15.Logger
 }
 
-func NewSectionRunner() SectionRunner {
-	sr := SectionRunner{
+func NewSectionRunner() *SectionRunner {
+	sr := &SectionRunner{
 		make(chan SectionRun, 2), make(chan Section, 2),
-		logger.New(),
+		Logger.New(),
 	}
 	go sr.start()
 	return sr

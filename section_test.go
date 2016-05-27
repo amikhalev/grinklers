@@ -1,4 +1,4 @@
-package main
+package grinklers
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 )
 
 func TestInitSection(t *testing.T) {
-	logger.SetHandler(log15.DiscardHandler())
+	Logger.SetHandler(log15.DiscardHandler())
 
 	os.Setenv("RPI", "true")
 	assert.Panics(t, InitSection)
@@ -44,15 +44,30 @@ func TestRpioSection_JSON(t *testing.T) {
 	ass.Equal(`{"name":"test1234","pin":4,"state":true}`, string(bytes))
 }
 
+func TestRpioSections_JSON(t *testing.T) {
+	os.Setenv("RPI", "")
+	InitSection()
+
+	ass := assert.New(t)
+	var secs RpioSections
+
+	err := json.Unmarshal([]byte(`[{"name": "test1", "pin": 4},{"name": "test2", "pin": 5}]`), &secs)
+	require.NoError(t, err)
+
+	require.Len(t, secs, 2)
+	ass.Equal("test1", secs[0].Name())
+	ass.Equal("test2", secs[1].Name())
+}
+
 func TestRpioSection_Update(t *testing.T) {
 	os.Setenv("RPI", "")
 	InitSection()
 
 	ass := assert.New(t)
 
-	onUpdate := make(chan *RpioSection, 6)
+	onUpdate := make(chan Section, 6)
 	sec := NewRpioSection("test", 5)
-	sec.OnUpdate = onUpdate
+	sec.SetOnUpdate(onUpdate)
 
 	ass.Equal(false, sec.State())
 	sec.SetState(true)
@@ -82,21 +97,21 @@ func TestRpioSection_Run(t *testing.T) {
 	InitSection()
 
 	ass := assert.New(t)
-	sectionRunner = NewSectionRunner()
+	secRunner := NewSectionRunner()
 	sec := NewRpioSection("test2", 6)
 
 	ass.Equal(false, sec.State())
-	go sec.RunFor(50 * time.Millisecond)
+	go secRunner.RunSection(&sec, 50 * time.Millisecond)
 	time.Sleep(25 * time.Millisecond)
 	ass.Equal(true, sec.State())
 	time.Sleep(50 * time.Millisecond)
 	ass.Equal(false, sec.State())
 
 	ass.Equal(false, sec.State())
-	go sec.RunFor(time.Minute)
+	go secRunner.RunSection(&sec, time.Minute)
 	time.Sleep(25 * time.Millisecond)
 	ass.Equal(true, sec.State())
-	sec.Cancel()
+	secRunner.CancelSection(&sec)
 	time.Sleep(25 * time.Millisecond)
 	ass.Equal(false, sec.State())
 
