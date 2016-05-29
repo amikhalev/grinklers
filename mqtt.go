@@ -3,56 +3,60 @@ package grinklers
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/eclipse/paho.mqtt.golang"
 	"net/url"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/Sirupsen/logrus"
+	"github.com/eclipse/paho.mqtt.golang"
 )
 
 type apiHandlerFunc func(client mqtt.Client, message mqtt.Message) (resp interface{}, err error)
 
 type respJson struct {
-	Rid      int    `json:"rid,omitempty"`
+	Rid      int         `json:"rid,omitempty"`
 	Response interface{} `json:"message,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Error    string      `json:"error,omitempty"`
 }
 
-type MqttApi struct {
+type MQTTApi struct {
 	sections  []Section
 	programs  []Program
 	secRunner *SectionRunner
 	client    mqtt.Client
 	prefix    string
+	logger    *logrus.Entry
 }
 
-func NewMqttApi(sections []Section, programs []Program, secRunner *SectionRunner) *MqttApi {
-	return &MqttApi{
+func NewMQTTApi(sections []Section, programs []Program, secRunner *SectionRunner) *MQTTApi {
+	return &MQTTApi{
 		sections, programs, secRunner,
 		nil, "",
+		Logger.WithField("module", "MQTTApi"),
 	}
 }
 
-func createMqttOpts(brokerUri *url.URL, cid string) (opts *mqtt.ClientOptions) {
+func (a *MQTTApi) createMQTTOpts(brokerURI *url.URL, cid string) (opts *mqtt.ClientOptions) {
 	opts = mqtt.NewClientOptions()
-	opts.AddBroker(brokerUri.String())
-	if brokerUri.User != nil {
-		username := brokerUri.User.Username()
+	opts.AddBroker(brokerURI.String())
+	if brokerURI.User != nil {
+		username := brokerURI.User.Username()
 		opts.SetUsername(username)
-		password, _ := brokerUri.User.Password()
+		password, _ := brokerURI.User.Password()
 		opts.SetPassword(password)
-		Logger.Debug("authenticating to mqtt server", "username", username, "password", password)
+		a.logger.WithFields(logrus.Fields{"username": username, "password": password}).Debug("authenticating to mqtt server")
 	}
 	opts.SetClientID(cid)
 	return
 }
 
-func (a *MqttApi) Start() (err error) {
+func (a *MQTTApi) Start() (err error) {
 	broker := os.Getenv("MQTT_BROKER")
 	if broker == "" {
 		broker = "tcp://localhost:1883"
 	}
-	brokerUri, err := url.Parse(broker)
+	brokerURI, err := url.Parse(broker)
 	if err != nil {
 		err = fmt.Errorf("error parsing MQTT_BROKER: %v", err)
 		return
@@ -61,26 +65,26 @@ func (a *MqttApi) Start() (err error) {
 	if cid == "" {
 		cid = "grinklers-1"
 	}
-	if brokerUri.Path != "" {
-		a.prefix = brokerUri.Path
+	if brokerURI.Path != "" {
+		a.prefix = brokerURI.Path
 	} else {
 		a.prefix = "grinklers"
 	}
-	Logger.Debug("broker prefix", "prefix", a.prefix)
+	a.logger.Debugf("broker prefix: '%s'", a.prefix)
 
-	opts := createMqttOpts(brokerUri, cid)
-	opts.SetWill(a.prefix + "/connected", "false", 1, true)
+	opts := a.createMQTTOpts(brokerURI, cid)
+	opts.SetWill(a.prefix+"/connected", "false", 1, true)
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
-		Logger.Info("connected to mqtt broker")
+		a.logger.Info("connected to mqtt broker")
 		a.updateConnected(true)
 	})
 	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
-		Logger.Warn("lost connection to mqtt broker", "err", err)
+		a.logger.WithError(err).Warn("lost connection to mqtt broker")
 	})
 	a.client = mqtt.NewClient(opts)
 
 	if token := a.client.Connect(); token.Wait() && token.Error() != nil {
-		Logger.Error("error connecting to mqtt broker", "err", token.Error())
+		a.logger.WithError(token.Error()).Error("error connecting to mqtt broker")
 	}
 
 	a.subscribe()
@@ -88,37 +92,39 @@ func (a *MqttApi) Start() (err error) {
 	return
 }
 
-func (a *MqttApi) Stop() {
-	Logger.Info("disconnecting from mqtt broker")
+func (a *MQTTApi) Stop() {
+	a.logger.Info("disconnecting from mqtt broker")
 	a.updateConnected(false)
 	a.client.Disconnect(250)
 }
 
-func (a *MqttApi) Client() mqtt.Client {
+func (a *MQTTApi) Client() mqtt.Client {
 	return a.client
 }
 
-func (a *MqttApi) Prefix() string {
+func (a *MQTTApi) Prefix() string {
 	return a.prefix
 }
 
-func (a *MqttApi) updateConnected(connected bool) (err error) {
+func (a *MQTTApi) updateConnected(connected bool) (err error) {
 	str := strconv.FormatBool(connected)
-	token := a.client.Publish(a.prefix + "/connected", 1, true, str)
+	token := a.client.Publish(a.prefix+"/connected", 1, true, str)
 	if token.Wait(); token.Error() != nil {
 		return token.Error()
 	}
 	return
 }
 
-func (a *MqttApi) subscribeHandler(path string, handler apiHandlerFunc) {
-	Logger.Debug("registering handler", "path", a.prefix + path)
-	a.client.Subscribe(a.prefix + path, 2, func(client mqtt.Client, message mqtt.Message) {
+func (a *MQTTApi) subscribeHandler(p string, handler apiHandlerFunc) {
+	path := a.prefix + p
+	a.logger.WithField("path", path).Debug("registering handler")
+	a.client.Subscribe(path, 2, func(client mqtt.Client, message mqtt.Message) {
 		var data struct {
 			Rid int
 		}
 		var (
-			res interface{}; err error
+			res interface{}
+			err error
 		)
 
 		err = json.Unmarshal(message.Payload(), &data)
@@ -129,18 +135,18 @@ func (a *MqttApi) subscribeHandler(path string, handler apiHandlerFunc) {
 
 		defer func() {
 			if pan := recover(); pan != nil {
-				Logger.Warn("panic in api responder", "panic", pan)
+				a.logger.WithField("panic", pan).Warn("panic in api responder")
 				err = fmt.Errorf("internal server panic: %v", pan)
 			}
 			var rData respJson
 			if err != nil {
-				Logger.Info("error processing request", "err", err)
+				a.logger.WithError(err).Info("error processing request")
 				rData = respJson{data.Rid, nil, err.Error()}
 			} else {
 				rData = respJson{data.Rid, res, ""}
 			}
 			resBytes, _ := json.Marshal(&rData)
-			client.Publish(a.prefix + path + "/response", 1, false, resBytes)
+			client.Publish(path+"/response", 1, false, resBytes)
 		}()
 
 		res, err = handler(client, message)
@@ -172,13 +178,13 @@ func parseDuration(durStr *string) (duration *time.Duration, err error) {
 	return
 }
 
-func (a *MqttApi) UpdateSections(sections []Section) (err error) {
+func (a *MQTTApi) UpdateSections(sections []Section) (err error) {
 	bytes, err := json.Marshal(sections)
 	if err != nil {
 		err = fmt.Errorf("error marshalling sections: %v", err)
 		return
 	}
-	token := a.client.Publish(a.prefix + "/sections", 1, true, bytes)
+	token := a.client.Publish(a.prefix+"/sections", 1, true, bytes)
 	if token.Wait(); token.Error() != nil {
 		err = fmt.Errorf("error publishing sections: %v", token.Error())
 		return
@@ -187,7 +193,7 @@ func (a *MqttApi) UpdateSections(sections []Section) (err error) {
 	return
 }
 
-func (a *MqttApi) UpdatePrograms(programs []Program) (err error) {
+func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
 	data, err := ProgramsToJSON(programs, a.sections)
 	if err != nil {
 		err = fmt.Errorf("error converting programs to json: %v", err)
@@ -198,7 +204,7 @@ func (a *MqttApi) UpdatePrograms(programs []Program) (err error) {
 		err = fmt.Errorf("error marshalling programs: %v", err)
 		return
 	}
-	token := a.client.Publish(a.prefix + "/programs", 1, true, bytes)
+	token := a.client.Publish(a.prefix+"/programs", 1, true, bytes)
 	if token.Wait(); token.Error() != nil {
 		err = fmt.Errorf("error publishing programs: %v", token.Error())
 		return
@@ -207,7 +213,7 @@ func (a *MqttApi) UpdatePrograms(programs []Program) (err error) {
 	return
 }
 
-func (a *MqttApi) subscribe() {
+func (a *MQTTApi) subscribe() {
 	a.subscribeHandler("/runProgram", func(client mqtt.Client, message mqtt.Message) (res interface{}, err error) {
 		data, err := parseProgramJson(message.Payload())
 		if err != nil {
@@ -289,16 +295,17 @@ func (a *MqttApi) subscribe() {
 	})
 }
 
-type MqttUpdater struct {
+type MQTTUpdater struct {
 	sections        []Section
 	programs        []Program
 	onSectionUpdate chan Section
 	onProgramUpdate chan *Program
 	stop            chan int
-	api             *MqttApi
+	api             *MQTTApi
+	logger          *logrus.Entry
 }
 
-func NewMqttUpdater(sections []Section, programs []Program) *MqttUpdater {
+func NewMQTTUpdater(sections []Section, programs []Program) *MQTTUpdater {
 	onSectionUpdate, onProgramUpdate, stop := make(chan Section, 10), make(chan *Program, 10), make(chan int)
 	for i, _ := range sections {
 		sections[i].SetOnUpdate(onSectionUpdate)
@@ -306,50 +313,51 @@ func NewMqttUpdater(sections []Section, programs []Program) *MqttUpdater {
 	for i, _ := range programs {
 		programs[i].OnUpdate = onProgramUpdate
 	}
-	return &MqttUpdater{
+	return &MQTTUpdater{
 		sections, programs,
 		onSectionUpdate, onProgramUpdate, stop, nil,
+		Logger.WithField("module", "MQTTUpdater"),
 	}
 }
 
-func (u *MqttUpdater) UpdateSections() (error) {
+func (u *MQTTUpdater) UpdateSections() error {
 	return u.api.UpdateSections(u.sections)
 }
 
-func (u *MqttUpdater) UpdatePrograms() (error) {
+func (u *MQTTUpdater) UpdatePrograms() error {
 	return u.api.UpdatePrograms(u.programs)
 }
 
-func (u *MqttUpdater) run() {
-	Logger.Debug("starting updater")
+func (u *MQTTUpdater) run() {
+	u.logger.Debug("starting updater")
 	for {
 		//logger.Debug("waiting for update")
 		select {
 		case <-u.stop:
 			return
 		case <-u.onSectionUpdate:
-		//logger.Debug("sec update")
+			//logger.Debug("sec update")
 			ExhaustChan(u.onSectionUpdate)
 			err := u.UpdateSections()
 			if err != nil {
-				Logger.Error("error updating sections", "err", err)
+				u.logger.WithError(err).Error("error updating sections")
 			}
 		case <-u.onProgramUpdate:
-		//logger.Debug("prog update")
+			//logger.Debug("prog update")
 			ExhaustChan(u.onProgramUpdate)
 			err := u.UpdatePrograms()
 			if err != nil {
-				Logger.Error("error updating programs", "err", err)
+				u.logger.WithError(err).Error("error updating programs")
 			}
 		}
 	}
 }
 
-func (u *MqttUpdater) Start(api *MqttApi) {
+func (u *MQTTUpdater) Start(api *MQTTApi) {
 	u.api = api
 	go u.run()
 }
 
-func (u *MqttUpdater) Stop() {
+func (u *MQTTUpdater) Stop() {
 	u.stop <- 0
 }

@@ -8,7 +8,7 @@ import (
 func TestTimeOfDay(t *testing.T) {
 	tod := TimeOfDay{1, 1, 1}
 	dur := tod.Duration()
-	if dur.Seconds() != 1 + 60 + 3600 {
+	if dur.Seconds() != 1+60+3600 {
 		t.Error("TimeOfDay#Duration")
 	}
 	if tod.String() != "01:01:01" {
@@ -17,7 +17,7 @@ func TestTimeOfDay(t *testing.T) {
 }
 
 func TestNextDay(t *testing.T) {
-	test := func (day int, weekday time.Weekday, expectedDay int) {
+	test := func(day int, weekday time.Weekday, expectedDay int) {
 		tim := time.Date(2016, 5, day, 0, 0, 0, 0, time.Local)
 		d := nextDay(tim, weekday)
 		if d != time.Date(2016, 5, expectedDay, 0, 0, 0, 0, time.Local) {
@@ -31,10 +31,10 @@ func TestNextDay(t *testing.T) {
 
 func TestSchedule_NextRunAfterTime(t *testing.T) {
 	schedule := Schedule{
-		Times: []TimeOfDay{ TimeOfDay{8, 30, 0}, TimeOfDay{20, 0, 0} },
+		Times:    []TimeOfDay{TimeOfDay{8, 30, 0}, TimeOfDay{20, 0, 0}},
 		Weekdays: []time.Weekday{time.Thursday, time.Friday},
-		From: nil,
-		To: nil,
+		From:     nil,
+		To:       nil,
 	}
 	refTime := time.Date(2016, 5, 16, 0, 0, 0, 0, time.Local)
 	tim := schedule.NextRunAfterTime(refTime)
@@ -50,10 +50,10 @@ func TestSchedule_NextRunAfterTime(t *testing.T) {
 
 func TestSchedule_NextRunTime(t *testing.T) {
 	schedule := Schedule{
-		Times: []TimeOfDay{ TimeOfDay{8, 30, 0}, TimeOfDay{20, 0, 0} },
+		Times:    []TimeOfDay{TimeOfDay{8, 30, 0}, TimeOfDay{20, 0, 0}},
 		Weekdays: []time.Weekday{time.Thursday, time.Friday},
-		From: nil,
-		To: nil,
+		From:     nil,
+		To:       nil,
 	}
 	if *schedule.NextRunTime() != *schedule.NextRunAfterTime(time.Now()) {
 		t.Error("Schedule#NextRunTime")
@@ -61,7 +61,7 @@ func TestSchedule_NextRunTime(t *testing.T) {
 }
 
 func TestNewPattern(t *testing.T) {
-	defer func (){
+	defer func() {
 		if r := recover(); r == nil {
 			t.Error("newPattern did not panic on invalid pattern")
 		}
@@ -83,10 +83,11 @@ func assertTokenContents(t *testing.T, tok token, contents string) {
 
 func TestTokenize(t *testing.T) {
 	tokens, err := tokenize([]byte("1234567890 / : At Am Pm On And Also Through " +
-	"Thru - From Starting To Until Mon Monday Tue Tuesday Wed Wednesday " +
-	"Thu Thur Thursday Fri Friday Sat Saturday Sun Sunday "))
+		"Thru - From Starting To Until Mon Monday Tue Tuesday Wed Wednesday " +
+		"Thu Thur Thursday Fri Friday Sat Saturday Sun Sunday "))
 	if err != nil {
-		t.Errorf("tokenize returned err: %v", err); return
+		t.Errorf("tokenize returned err: %v", err)
+		return
 	}
 	assertTokenType(t, tokens[0], INT)
 	assertTokenContents(t, tokens[0], "1234567890")

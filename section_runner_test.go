@@ -1,12 +1,13 @@
 package grinklers
 
 import (
-	"github.com/inconshreveable/log15"
+	"io/ioutil"
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"testing"
-	"time"
 )
 
 type MockSection struct {
@@ -163,7 +164,7 @@ type SectionRunnerSuite struct {
 func (s *SectionRunnerSuite) SetupSuite() {
 	s.ass = assert.New(s.T())
 	s.sr = NewSectionRunner()
-	s.sr.SetHandler(log15.DiscardHandler())
+	s.sr.log.Logger.Out = ioutil.Discard
 	s.ass.NotNil(s.sr)
 }
 

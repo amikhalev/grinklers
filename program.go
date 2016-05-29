@@ -1,11 +1,12 @@
 package grinklers
 
 import (
-	. "github.com/amikhalev/grinklers/sched"
-	"github.com/inconshreveable/log15"
-	"time"
-	"sync"
 	"fmt"
+	"sync"
+	"time"
+
+	"github.com/Sirupsen/logrus"
+	. "github.com/amikhalev/grinklers/sched"
 )
 
 type ProgItem struct {
@@ -14,7 +15,7 @@ type ProgItem struct {
 }
 
 type ProgItemJSON struct {
-	Section  int   `json:"section"`
+	Section  int    `json:"section"`
 	Duration string `json:"duration"`
 }
 
@@ -65,8 +66,8 @@ type Program struct {
 	mutex    *sync.Mutex
 	running  bool
 	runner   chan ProgRunnerMsg
-	OnUpdate chan <- *Program
-	log15.Logger
+	OnUpdate chan<- *Program
+	log      *logrus.Entry
 }
 
 func NewProgram(name string, sequence []ProgItem, schedule Schedule, enabled bool) *Program {
@@ -74,7 +75,7 @@ func NewProgram(name string, sequence []ProgItem, schedule Schedule, enabled boo
 	prog := &Program{
 		name, sequence, schedule, enabled,
 		&sync.Mutex{}, false, runner, nil,
-		Logger.New("program", name),
+		Logger.WithField("program", name),
 	}
 	return prog
 }
@@ -95,11 +96,11 @@ func (seq ProgSequenceJSON) ToSequence(sections []Section) (sequence ProgSequenc
 }
 
 type ProgramJSON struct {
-	Name     *string         `json:"name"`
-	Sequence ProgSequenceJSON     `json:"sequence"`
-	Sched    *Schedule `json:"sched"`
-	Enabled  *bool           `json:"enabled"`
-	Running  *bool          `json:"running,omitempty"`
+	Name     *string          `json:"name"`
+	Sequence ProgSequenceJSON `json:"sequence"`
+	Sched    *Schedule        `json:"sched"`
+	Enabled  *bool            `json:"enabled"`
+	Running  *bool            `json:"running,omitempty"`
 }
 
 func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
@@ -149,18 +150,19 @@ func (prog *Program) unlock() {
 
 func (prog *Program) onUpdate() {
 	if prog.OnUpdate != nil {
-		prog.Debug("prog.onUpdate()")
+		//prog.Debug("prog.onUpdate()")
 		prog.OnUpdate <- prog
 	} else {
-		prog.Warn("OnUpdate is nil!", "onUpdate", prog.OnUpdate)
+		prog.log.Warnf("OnUpdate is nil! :%v", prog.OnUpdate)
 	}
 }
 
 func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
 	if prog.Running() {
+		prog.log.Info("program was started when already running")
 		return
 	}
-	prog.Info("running program")
+	prog.log.Info("running program")
 	prog.setRunning(true)
 	prog.onUpdate()
 	stop := func() {
@@ -177,18 +179,18 @@ func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
 			continue
 		case <-cancel:
 			secRunner.CancelSection(item.Sec)
-			prog.Info("program run cancelled")
+			prog.log.Info("program run cancelled")
 			stop()
 			return
 		}
 	}
-	prog.Info("finished running program")
+	prog.log.Info("finished running program")
 	stop()
 }
 
 func (prog *Program) start(secRunner *SectionRunner) {
 	var (
-		msg ProgRunnerMsg
+		msg     ProgRunnerMsg
 		nextRun *time.Time
 		delay   <-chan time.Time
 	)
@@ -207,18 +209,19 @@ func (prog *Program) start(secRunner *SectionRunner) {
 		if nextRun != nil {
 			dur := nextRun.Sub(time.Now())
 			delay = time.After(dur)
-			prog.Debug("program scheduled", "dur", dur)
+			prog.log.WithFields(logrus.Fields{"nextRun": nextRun, "waitDuration": dur}).Debug("program scheduled")
 		} else {
 			delay = nil
-			prog.Debug("program not scheduled", "enabled", prog.Enabled)
+			prog.log.WithFields(logrus.Fields{"enabled": prog.Enabled}).Debug("program not scheduled")
 		}
 		//prog.Debug("runner waiting for command", "delay", delay)
 		select {
 		case msg = <-prog.runner:
-			prog.Debug("runner cmd", "msg", msg)
+			//prog.Debug("runner cmd", "msg", msg)
 			switch msg {
 			case PR_QUIT:
 				cancelRun <- 0
+				prog.log.Debug("quitting runner")
 				return
 			case PR_CANCEL:
 				cancelRun <- 0

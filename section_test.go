@@ -2,24 +2,25 @@ package grinklers
 
 import (
 	"encoding/json"
-	"github.com/inconshreveable/log15"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"io/ioutil"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInitSection(t *testing.T) {
-	Logger.SetHandler(log15.DiscardHandler())
+	Logger.Out = ioutil.Discard
 
 	os.Setenv("RPI", "true")
-	assert.Panics(t, InitSection)
+	assert.Error(t, InitSection())
 	CleanupSection()
 
 	os.Setenv("RPI", "")
-	assert.NotPanics(t, InitSection)
-	assert.NotPanics(t, CleanupSection)
+	assert.NoError(t, InitSection())
+	assert.NoError(t, CleanupSection())
 }
 
 func TestRpioSection_JSON(t *testing.T) {
@@ -57,6 +58,9 @@ func TestRpioSections_JSON(t *testing.T) {
 	require.Len(t, secs, 2)
 	ass.Equal("test1", secs[0].Name())
 	ass.Equal("test2", secs[1].Name())
+
+	err = json.Unmarshal([]byte(`{}`), &secs)
+	ass.Error(err)
 }
 
 func TestRpioSection_Update(t *testing.T) {
@@ -92,6 +96,28 @@ func TestRpioSection_Update(t *testing.T) {
 	ass.Equal(false, sec.State())
 }
 
+func TestRpioSection_SetState(t *testing.T) {
+	ass := assert.New(t)
+
+	os.Setenv("RPI", "true")
+	ass.Error(InitSection())
+
+	sec := NewRpioSection("test", 5)
+
+	ass.Panics(func() {
+		sec.SetState(true)
+	})
+	ass.Panics(func() {
+		sec.State()
+	})
+	ass.Panics(func() {
+		sec.SetState(false)
+	})
+	ass.Panics(func() {
+		sec.State()
+	})
+}
+
 func TestRpioSection_Run(t *testing.T) {
 	os.Setenv("RPI", "")
 	InitSection()
@@ -101,7 +127,7 @@ func TestRpioSection_Run(t *testing.T) {
 	sec := NewRpioSection("test2", 6)
 
 	ass.Equal(false, sec.State())
-	go secRunner.RunSection(&sec, 50 * time.Millisecond)
+	go secRunner.RunSection(&sec, 50*time.Millisecond)
 	time.Sleep(25 * time.Millisecond)
 	ass.Equal(true, sec.State())
 	time.Sleep(50 * time.Millisecond)

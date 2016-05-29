@@ -2,17 +2,18 @@ package grinklers
 
 import (
 	"encoding/json"
+	"io/ioutil"
+	"testing"
+	"time"
+
 	. "github.com/amikhalev/grinklers/sched"
-	"github.com/inconshreveable/log15"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestProgram_JSON(t *testing.T) {
-	Logger.SetHandler(log15.DiscardHandler())
+	Logger.Out = ioutil.Discard
 	ass := assert.New(t)
 
 	sections := []Section{

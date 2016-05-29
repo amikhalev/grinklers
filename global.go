@@ -1,7 +1,11 @@
 package grinklers
 
 import (
-	"github.com/inconshreveable/log15"
+	"github.com/Sirupsen/logrus"
 )
 
-var Logger = log15.New()
+var Logger = logrus.New()
+
+func init() {
+	Logger.Level = logrus.DebugLevel
+}

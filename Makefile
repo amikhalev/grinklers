@@ -43,7 +43,7 @@ test: $(GO_SOURCES) $(GO_TESTS)
 	$(GO) test
 
 $(COV_OUTPUT): $(GO_SOURCES) $(GO_TESTS)
-	$(GO) test -coverprofile=${COV_OUTPUT}
+	$(GO) test -coverprofile=${COV_OUTPUT} ./...
 
 $(COV_HTML): $(COV_OUTPUT)
 	$(GO) tool cover -html=$(COV_OUTPUT) -o $(COV_HTML)

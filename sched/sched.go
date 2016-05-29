@@ -1,10 +1,10 @@
 package sched
 
 import (
-	"time"
-	"regexp"
 	"fmt"
+	"regexp"
 	"strconv"
+	"time"
 )
 
 type TimeOfDay struct {
@@ -15,10 +15,10 @@ type TimeOfDay struct {
 }
 
 func (tod *TimeOfDay) Duration() time.Duration {
-	return time.Duration(tod.Hour) * time.Hour +
-	time.Duration(tod.Minute) * time.Minute +
-	time.Duration(tod.Second) * time.Second +
-	time.Duration(tod.Millisecond) * time.Millisecond
+	return time.Duration(tod.Hour)*time.Hour +
+		time.Duration(tod.Minute)*time.Minute +
+		time.Duration(tod.Second)*time.Second +
+		time.Duration(tod.Millisecond)*time.Millisecond
 }
 
 func (t *TimeOfDay) String() string {
@@ -26,23 +26,23 @@ func (t *TimeOfDay) String() string {
 }
 
 type Date struct {
-	Year  uint `json:"year"`
+	Year  uint       `json:"year"`
 	Month time.Month `json:"month"`
-	Day   uint `json:"day"`
+	Day   uint       `json:"day"`
 }
 
 type Schedule struct {
-	Times    []TimeOfDay `json:"times"`
+	Times    []TimeOfDay    `json:"times"`
 	Weekdays []time.Weekday `json:"weekdays"`
-	From     *Date `json:"from"`
-	To       *Date `json:"to"`
+	From     *Date          `json:"from"`
+	To       *Date          `json:"to"`
 }
 
 func weeks(weeks int64) time.Duration {
 	return time.Duration(weeks) * 24 * time.Hour
 }
 
-func nextDay(t time.Time, wd time.Weekday) (time.Time) {
+func nextDay(t time.Time, wd time.Weekday) time.Time {
 	year, month, day := t.Date()
 	timeWithDay := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
 	weekday := timeWithDay.Weekday()
@@ -91,7 +91,7 @@ func parseError(errorString string, input []byte, start int, end int) error {
 	return fmt.Errorf("%s: '%s«%s»%s'", errorString, input[:start], input[start:end], input[end:])
 }
 
-type TokenType int;
+type TokenType int
 
 const (
 	ILLEGAL TokenType = iota
@@ -112,7 +112,13 @@ const (
 	FROM
 	TO
 
-	MON; TUE; WED; THUR; FRI; SAT; SUN
+	MON
+	TUE
+	WED
+	THUR
+	FRI
+	SAT
+	SUN
 )
 
 func (t TokenType) String() string {
@@ -194,11 +200,11 @@ func tokenize(input []byte) (tokens []token, err error) {
 		var candidate *token
 		for _, match := range matches {
 			if candidate == nil {
-				if (match.Len() > 0) {
+				if match.Len() > 0 {
 					candidate = &match
 				}
 			} else {
-				if (match.Len() > candidate.Len()) {
+				if match.Len() > candidate.Len() {
 					candidate = &match
 				}
 			}
@@ -207,7 +213,7 @@ func tokenize(input []byte) (tokens []token, err error) {
 			err = parseError("could not find token matching", input, pos, len(input))
 			return
 		} else {
-			if (candidate.ty != WS) {
+			if candidate.ty != WS {
 				tokens = append(tokens, *candidate)
 			}
 		}
@@ -246,7 +252,7 @@ func (p *ScheduleParser) tokenize() (err error) {
 	return
 }
 
-func (p *ScheduleParser) peek() (*token) {
+func (p *ScheduleParser) peek() *token {
 	return &p.tokens[p.nextTok]
 }
 
@@ -254,7 +260,7 @@ func (p *ScheduleParser) nextIs(ty TokenType) bool {
 	return p.peek().ty == ty
 }
 
-func (p *ScheduleParser) accept(ty TokenType) (*token) {
+func (p *ScheduleParser) accept(ty TokenType) *token {
 	tok := p.peek()
 	if tok.ty != ty {
 		return nil
@@ -272,11 +278,11 @@ func (p *ScheduleParser) expect(ty TokenType) (tok *token, err error) {
 	return
 }
 
-func (p *ScheduleParser) peek2() (*token) {
-	if p.nextTok + 1 >= len(p.tokens) {
+func (p *ScheduleParser) peek2() *token {
+	if p.nextTok+1 >= len(p.tokens) {
 		return nil
 	}
-	return &p.tokens[p.nextTok + 1]
+	return &p.tokens[p.nextTok+1]
 }
 
 func (p *ScheduleParser) nextIs2(ty TokenType) bool {
@@ -288,7 +294,8 @@ func (p *ScheduleParser) parseSchedule() (sched *Schedule, err error) {
 		return
 	}
 	var (
-		times []TimeOfDay; tim *TimeOfDay
+		times []TimeOfDay
+		tim   *TimeOfDay
 	)
 	for true {
 		tim, err = p.parseTimeOfDay()
@@ -312,7 +319,8 @@ func (p *ScheduleParser) parseSchedule() (sched *Schedule, err error) {
 		weekdays = everyDay
 	}
 	var (
-		from *Date; to *Date
+		from *Date
+		to   *Date
 	)
 	if p.accept(FROM) != nil {
 		from, err = p.parseDate()

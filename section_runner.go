@@ -2,8 +2,9 @@ package grinklers
 
 import (
 	"fmt"
-	"github.com/inconshreveable/log15"
 	"time"
+
+	"github.com/Sirupsen/logrus"
 )
 
 type SectionRun struct {
@@ -82,13 +83,13 @@ func (q *SRQueue) RemoveMatchingSection(sec Section) {
 type SectionRunner struct {
 	run    chan SectionRun
 	cancel chan Section
-	log15.Logger
+	log    *logrus.Entry
 }
 
 func NewSectionRunner() *SectionRunner {
 	sr := &SectionRunner{
 		make(chan SectionRun, 2), make(chan Section, 2),
-		Logger.New(),
+		Logger.WithField("module", "SectionRunner"),
 	}
 	go sr.start()
 	return sr
@@ -104,7 +105,9 @@ func (r *SectionRunner) start() {
 		if currentItem == nil {
 			return
 		}
-		r.Debug("running section", "queueLen", queue.Len(), "currentItem", currentItem)
+		r.log.WithFields(logrus.Fields{
+			"queueLen": queue.Len(), "currentItem": currentItem,
+		}).Info("running section")
 		currentItem.Sec.SetState(true)
 		delay = time.After(currentItem.Duration)
 	}
@@ -114,8 +117,10 @@ func (r *SectionRunner) start() {
 		if currentItem.Done != nil {
 			currentItem.Done <- queue.Len()
 		}
+		r.log.WithFields(logrus.Fields{
+			"queueLen": queue.Len(), "currentItem": currentItem,
+		}).Info("finished running section")
 		currentItem = queue.Pop()
-		r.Debug("finished running section", "queueLen", queue.Len(), "currentItem", currentItem)
 	}
 	for {
 		select {
@@ -125,7 +130,9 @@ func (r *SectionRunner) start() {
 				runItem()
 			} else {
 				queue.Push(&item)
-				r.Debug("queued section run", "queueLen", queue.Len(), "currentItem", currentItem, "item", &item)
+				r.log.WithFields(logrus.Fields{
+					"queueLen": queue.Len(), "currentItem": currentItem, "item": &item,
+				}).Debug("queued section run")
 			}
 		case cancelSec := <-r.cancel:
 			queue.RemoveMatchingSection(cancelSec)
@@ -133,7 +140,9 @@ func (r *SectionRunner) start() {
 				finishRun()
 				runItem()
 			}
-			r.Debug("cancelled section run", "queueLen", queue.Len(), "currentItem", currentItem, "sec", cancelSec.Name())
+			r.log.WithFields(logrus.Fields{
+				"queueLen": queue.Len(), "currentItem": currentItem, "sec": cancelSec.Name(),
+			}).Debug("cancelled section run")
 		case <-delay:
 			finishRun()
 			runItem()

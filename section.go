@@ -3,9 +3,10 @@ package grinklers
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/inconshreveable/log15"
-	"github.com/stianeikeland/go-rpio"
 	"os"
+
+	"github.com/Sirupsen/logrus"
+	"github.com/stianeikeland/go-rpio"
 )
 
 type Section interface {
@@ -20,32 +21,38 @@ var (
 	sectionValues []bool
 )
 
-func InitSection() {
+func InitSection() (err error) {
 	RPI = (os.Getenv("RPI") == "true")
 	if RPI {
 		Logger.Info("opening rpio")
-		err := rpio.Open()
+		err = rpio.Open()
 		if err != nil {
-			panic(fmt.Errorf("error opening rpio: %v", err))
+			err = fmt.Errorf("error opening rpio: %v", err)
+			return
 		}
 	} else {
 		sectionValues = make([]bool, 24)
 	}
+	return
 }
 
-func CleanupSection() {
+func CleanupSection() (err error) {
 	if RPI {
-		rpio.Close()
+		err = rpio.Close()
+		if err != nil {
+			return
+		}
 	} else {
 		sectionValues = nil
 	}
+	return
 }
 
 type RpioSection struct {
 	name     string
 	pin      rpio.Pin
 	onUpdate chan<- Section
-	log15.Logger
+	log      *logrus.Entry
 }
 
 var _ Section = (*RpioSection)(nil)
@@ -54,7 +61,7 @@ func NewRpioSection(name string, pin rpio.Pin) RpioSection {
 	return RpioSection{
 		name, pin,
 		nil,
-		Logger.New("section", name),
+		Logger.WithField("section", name),
 	}
 }
 
@@ -91,7 +98,7 @@ func (sec *RpioSection) update() {
 
 func (sec *RpioSection) SetState(on bool) {
 	if RPI {
-		sec.Debug("setting section state", "on", on)
+		sec.log.WithField("state", on).Debug("setting section state")
 		if on {
 			sec.pin.Output()
 			sec.pin.High()
@@ -100,7 +107,7 @@ func (sec *RpioSection) SetState(on bool) {
 			sec.pin.Input()
 		}
 	} else {
-		sec.Debug("[stub] setting section state", "on", on)
+		sec.log.WithField("state", on).Debug("[stub] setting section state")
 		sectionValues[sec.pin-2] = on
 	}
 	sec.update()
@@ -127,7 +134,7 @@ func (secs *RpioSections) UnmarshalJSON(b []byte) (err error) {
 		return
 	}
 	*secs = make(RpioSections, len(s))
-	for i, _  := range s {
+	for i, _ := range s {
 		(*secs)[i] = &s[i]
 	}
 	return

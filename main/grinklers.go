@@ -6,14 +6,37 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
-	"github.com/joho/godotenv"
+
+	log "github.com/Sirupsen/logrus"
 	g "github.com/amikhalev/grinklers"
-	log "github.com/inconshreveable/log15"
+	"github.com/joho/godotenv"
 )
 
 type ConfigDataJson struct {
 	Sections g.RpioSections
 	Programs g.ProgramsJSON
+}
+
+func loadConfig() (sections []g.Section, programs []g.Program, err error) {
+	var configData ConfigDataJson
+
+	file, err := ioutil.ReadFile("./config.json")
+	if err != nil {
+		err = fmt.Errorf("could not read config file: %v", err)
+		return
+	}
+	err = json.Unmarshal(file, &configData)
+	if err != nil {
+		err = fmt.Errorf("could not parse config file: %v", err)
+		return
+	}
+
+	sections = configData.Sections
+	programs, err = configData.Programs.ToPrograms(sections)
+	if err != nil {
+		err = fmt.Errorf("invalid programs json: %v", err)
+	}
+	return
 }
 
 func main() {
@@ -23,22 +46,9 @@ func main() {
 
 	godotenv.Load()
 
-	var configData ConfigDataJson
-
-	file, err := ioutil.ReadFile("./config.json")
+	sections, programs, err := loadConfig()
 	if err != nil {
-		panic(fmt.Errorf("error reading config file: %v", err))
-	}
-	err = json.Unmarshal(file, &configData)
-	if err != nil {
-		panic(fmt.Errorf("error parsing config file: %v", err))
-	}
-
-	sections := configData.Sections
-	log.Info("sections loaded", "sections", configData.Sections)
-	programs, err := configData.Programs.ToPrograms(sections)
-	if err != nil {
-		panic(fmt.Errorf("invalid programs json: %v", err))
+		log.Fatalf("error loading config: %v", err)
 	}
 
 	secRunner := g.NewSectionRunner()
@@ -46,7 +56,7 @@ func main() {
 	g.InitSection()
 	defer g.CleanupSection()
 
-	updater := g.NewMqttUpdater(sections, programs)
+	updater := g.NewMQTTUpdater(sections, programs)
 
 	log.Debug("initializing sections and programs")
 	for i, _ := range sections {
@@ -55,9 +65,11 @@ func main() {
 	for i, _ := range programs {
 		programs[i].Start(secRunner)
 	}
-	log.Info("initialized sections and programs")
+	log.WithFields(log.Fields{
+		"lenSections": len(sections), "lenPrograms": len(programs),
+	}).Info("initialized sections and programs")
 
-	api := g.NewMqttApi(sections, programs, secRunner)
+	api := g.NewMQTTApi(sections, programs, secRunner)
 	api.Start()
 	defer api.Stop()
 
@@ -70,5 +82,8 @@ func main() {
 	log.Info("cleaning up...")
 	for i, _ := range sections {
 		sections[i].SetState(false)
+	}
+	for i, _ := range programs {
+		programs[i].Quit()
 	}
 }
