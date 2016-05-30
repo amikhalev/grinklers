@@ -80,10 +80,10 @@ func main() {
 	<-sigc
 
 	log.Info("cleaning up...")
-	for i, _ := range sections {
-		sections[i].SetState(false)
-	}
 	for i, _ := range programs {
 		programs[i].Quit()
+	}
+	for i, _ := range sections {
+		sections[i].SetState(false)
 	}
 }
