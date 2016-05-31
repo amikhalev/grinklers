@@ -3,14 +3,20 @@ include .env
 endif
 
 BINARY     = ./grinklers
-COV_OUTPUT = ./coverage.out
-COV_HTML   = ./coverage.html
 
 GO := go
 
-GO_SOURCES   := $(shell find . -type f -name '*.go' -not -name '*_test.go')
-GO_TESTS     := $(shell find . -type f -name '*_test.go')
-STATIC_FILES  = config.json
+GO_PACKAGES      := $(shell go list ./...)
+GO_PACKAGE_PATHS := $(subst $(word 1,$(GO_PACKAGES)),./,$(GO_PACKAGES))
+GO_SOURCES       := $(shell find . -type f -name '*.go' -not -name '*_test.go')
+GO_TESTS         := $(shell find . -type f -name '*_test.go')
+
+STATIC_FILES = config.json
+
+COV_OUTPUT  := coverage.out
+COV_OUTPUTS := $(addsuffix /$(COV_OUTPUT),$(GO_PACKAGE_PATHS))
+COV_ALL     := ./coverage.all.out
+COV_HTML    := ./coverage.html
 
 DEPLOY_DIR    = ./rpi_deploy
 DEPLOY_BINARY = $(DEPLOY_DIR)/grinklers
@@ -20,7 +26,7 @@ DEPLOY_HOST  ?= 192.168.1.30
 DEPLOY_USER  ?= alex
 DEPLOY_PATH  ?= /home/alex/grinklers
 
-CLEAN_FILES = $(DEPLOY_DIR) $(COV_OUTPUT) $(COV_HTML)
+CLEAN_FILES = $(BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
 
 .PHONY: all clean deps run test cover deploy
 
@@ -34,22 +40,29 @@ $(BINARY): $(GO_SOURCES)
 	$(GO) build -o ${BINARY} ./main
 
 deps: $(GO_SOURCES)
-	$(GO) get -t ./...
+	$(GO) get -t $(GO_PACKAGES)
 
 run: $(BINARY)
 	$(BINARY)
 
 test: $(GO_SOURCES) $(GO_TESTS)
-	$(GO) test
+	$(GO) test $(GO_PACKAGES)
 
-$(COV_OUTPUT): $(GO_SOURCES) $(GO_TESTS)
-	$(GO) test -coverprofile=${COV_OUTPUT} ./...
+$(COV_OUTPUTS): %: $(GO_SOURCES) $(GO_TESTS)
+	$(GO) test ./$(@D) -coverprofile=$@
+	@if [ ! -f $@ ]; then touch $@; fi
 
-$(COV_HTML): $(COV_OUTPUT)
-	$(GO) tool cover -html=$(COV_OUTPUT) -o $(COV_HTML)
+$(COV_ALL): $(COV_OUTPUTS)
+	@echo "generating $@"
+	@echo "mode: set" > $@
+	@for out in $^ ; do cat $$out | grep -v "mode: set" >> $@; done
+
+$(COV_HTML): $(COV_ALL)
+	@echo "generating $@"
+	@$(GO) tool cover -html=$(COV_ALL) -o $(COV_HTML)
 
 cover: $(COV_HTML)
-#	start $(COV_HTML) || xdg-open $(COV_HTML) || open $(COV_HTML)
+	@echo "coverage generated. open file://$(realpath $<) in your web browser to view"
 
 $(DEPLOY_DIR):
 	mkdir -p $(DEPLOY_DIR)

@@ -1,7 +1,8 @@
 /.idea
 /.settings
 /.project
-/coverage.out
+coverage.out
+/coverage.all.out
 /coverage.html
 /grinklers
 /rpi_deploy

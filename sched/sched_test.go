@@ -6,13 +6,13 @@ import (
 )
 
 func TestTimeOfDay(t *testing.T) {
-	tod := TimeOfDay{1, 1, 1}
+	tod := TimeOfDay{1, 1, 1, 0}
 	dur := tod.Duration()
 	if dur.Seconds() != 1+60+3600 {
 		t.Error("TimeOfDay#Duration")
 	}
-	if tod.String() != "01:01:01" {
-		t.Errorf("TimeOfDay#String() = %s", dur.String())
+	if tod.String() != "01:01:01:0000" {
+		t.Errorf("TimeOfDay#String() = %s", tod.String())
 	}
 }
 
@@ -31,7 +31,7 @@ func TestNextDay(t *testing.T) {
 
 func TestSchedule_NextRunAfterTime(t *testing.T) {
 	schedule := Schedule{
-		Times:    []TimeOfDay{TimeOfDay{8, 30, 0}, TimeOfDay{20, 0, 0}},
+		Times:    []TimeOfDay{TimeOfDay{8, 30, 0, 0}, TimeOfDay{20, 0, 0, 0}},
 		Weekdays: []time.Weekday{time.Thursday, time.Friday},
 		From:     nil,
 		To:       nil,
@@ -50,7 +50,7 @@ func TestSchedule_NextRunAfterTime(t *testing.T) {
 
 func TestSchedule_NextRunTime(t *testing.T) {
 	schedule := Schedule{
-		Times:    []TimeOfDay{TimeOfDay{8, 30, 0}, TimeOfDay{20, 0, 0}},
+		Times:    []TimeOfDay{TimeOfDay{8, 30, 0, 0}, TimeOfDay{20, 0, 0, 0}},
 		Weekdays: []time.Weekday{time.Thursday, time.Friday},
 		From:     nil,
 		To:       nil,

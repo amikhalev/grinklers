@@ -22,7 +22,7 @@ func (tod *TimeOfDay) Duration() time.Duration {
 }
 
 func (t *TimeOfDay) String() string {
-	return fmt.Sprintf("%02d:%02d:%02d:%02d", t.Hour, t.Minute, t.Second, t.Millisecond)
+	return fmt.Sprintf("%02d:%02d:%02d:%04d", t.Hour, t.Minute, t.Second, t.Millisecond)
 }
 
 type Date struct {
