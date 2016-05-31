@@ -1,0 +1,1 @@
+if [ ! -f main/coverage.out ]; then touch main/coverage.out; fi
