@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/amikhalev/grinklers.svg?branch=master)](https://travis-ci.org/amikhalev/grinklers)
+[![Build Status](https://travis-ci.org/amikhalev/grinklers.svg?branch=master)](https://travis-ci.org/amikhalev/grinklers) [![Coverage Status](https://coveralls.io/repos/github/amikhalev/grinklers/badge.svg?branch=master)](https://coveralls.io/github/amikhalev/grinklers?branch=master)
 
 Grinklers
 =========
