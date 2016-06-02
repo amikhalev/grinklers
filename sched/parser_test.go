@@ -137,4 +137,9 @@ func TestScheduleParser_Parse(t *testing.T) {
 		_, err := parser.Parse([]byte(str))
 		require.Error(t, err)
 	}
+
+	parser.input = []byte("at")
+	parser.tokenize()
+	_, err := parser.parseWeekdays()
+	require.Error(t, err)
 }

@@ -3,6 +3,7 @@ package sched
 import (
 	"fmt"
 	"time"
+	"log"
 )
 
 type TimeOfDay struct {
@@ -24,9 +25,50 @@ func (t *TimeOfDay) String() string {
 }
 
 type Date struct {
-	Year  uint       `json:"year"`
+	Year  int       `json:"year"`
 	Month time.Month `json:"month"`
-	Day   uint       `json:"day"`
+	Day   int       `json:"day"`
+}
+
+func DateFromTime(t time.Time) Date {
+	return Date{t.Year(), t.Month(), t.Day()}
+}
+
+func (d *Date) ToTime() (time.Time) {
+	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.Local)
+}
+
+func (d *Date) WithResolvedYear() (Date) {
+	if d.Year == 0 {
+		return Date{time.Now().Year(), d.Month, d.Day}
+	}
+	return *d
+}
+
+func (date1 *Date) After(date2 *Date) bool {
+	d1, d2 := date1.WithResolvedYear(), date2.WithResolvedYear()
+	if d1.Year > d2.Year {
+		return true
+	} else if d1.Year == d2.Year {
+		if d1.Month > d2.Month {
+			return true
+		} else if d1.Month == d2.Month {
+			if d1.Day > d2.Day {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (date1 *Date) Before(date2 *Date) bool {
+	if *date1 == *date2 {
+		return false
+	} else if date1.After(date2) {
+		return false
+	} else {
+		return true
+	}
 }
 
 type Schedule struct {
@@ -59,16 +101,36 @@ func (sched *Schedule) NextRunTime() *time.Time {
 }
 
 func (sched *Schedule) NextRunAfterTime(timeReference time.Time) *time.Time {
-	var nextRunTime *time.Time
+	var (
+		nextRunTime *time.Time; to *Date; from *Date;
+	)
+	if sched.To != nil {
+		to = &Date{}
+		*to = sched.To.WithResolvedYear()
+	}
+	if sched.From != nil {
+		from = &Date{}
+		*from = sched.From.WithResolvedYear()
+		if to != nil && from.After(to) {
+			to.Year += 1
+		}
+		if from.ToTime().After(timeReference) {
+			timeReference = from.ToTime()
+		}
+	}
 	for _, weekday := range sched.Weekdays {
 		timeWithDay := nextDay(timeReference, weekday)
 		for _, tod := range sched.Times {
-			time := timeWithDay.Add(tod.Duration())
-			if time.Before(timeReference) {
-				time = time.Add(weeks(1))
+			tim := timeWithDay.Add(tod.Duration())
+			if tim.Before(timeReference) {
+				tim = tim.Add(weeks(1))
 			}
-			if nextRunTime == nil || nextRunTime.After(time) {
-				nextRunTime = &time
+			if to != nil && tim.After(to.ToTime()) {
+				log.Printf("rejecting %v because after to: %v", tim, to)
+				continue
+			}
+			if nextRunTime == nil || nextRunTime.After(tim) {
+				nextRunTime = &tim
 			}
 		}
 	}

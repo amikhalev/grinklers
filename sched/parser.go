@@ -144,11 +144,13 @@ func tokenize(input []byte) (tokens []token, err error) {
 				if match.Len() > 0 {
 					candidate = &match
 				}
-			} else {
-				if match.Len() > candidate.Len() {
-					candidate = &match
-				}
 			}
+			// Currently dead code, but a change in grammer might make it necessary
+			//else {
+			//	if match.Len() > candidate.Len() {
+			//		candidate = &match
+			//	}
+			//}
 		}
 		if candidate == nil {
 			err = newParseError("could not find token matching", input, pos, len(input))
@@ -220,9 +222,10 @@ func (p *ScheduleParser) expect(ty TokenType) (tok *token, err error) {
 }
 
 func (p *ScheduleParser) peek2() *token {
-	if p.nextTok + 1 >= len(p.tokens) {
-		return nil
-	}
+	// Should be impossible. A panic wouldn't be to bad anyways
+	//if p.nextTok + 1 >= len(p.tokens) {
+	//	return nil
+	//}
 	return &p.tokens[p.nextTok + 1]
 }
 
@@ -399,6 +402,6 @@ func (p *ScheduleParser) parseDate() (date *Date, err error) {
 			year += (time.Now().Year() / 100) * 100
 		}
 	}
-	return &Date{uint(year), time.Month(month), uint(day)}, nil
+	return &Date{year, time.Month(month), day}, nil
 }
 
