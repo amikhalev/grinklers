@@ -6,6 +6,16 @@ import (
 	"log"
 )
 
+var EveryDay = []time.Weekday{
+	time.Sunday,
+	time.Monday,
+	time.Tuesday,
+	time.Wednesday,
+	time.Thursday,
+	time.Friday,
+	time.Saturday,
+}
+
 type TimeOfDay struct {
 	Hour        int `json:"hour"`
 	Minute      int `json:"minute"`
@@ -135,14 +145,4 @@ func (sched *Schedule) NextRunAfterTime(timeReference time.Time) *time.Time {
 		}
 	}
 	return nextRunTime
-}
-
-var everyDay = []time.Weekday{
-	time.Sunday,
-	time.Monday,
-	time.Tuesday,
-	time.Wednesday,
-	time.Thursday,
-	time.Friday,
-	time.Saturday,
 }

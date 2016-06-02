@@ -260,7 +260,7 @@ func (p *ScheduleParser) parseSchedule() (sched *Schedule, err error) {
 			return
 		}
 	} else {
-		weekdays = everyDay
+		weekdays = EveryDay
 	}
 	var (
 		from *Date

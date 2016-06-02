@@ -104,7 +104,7 @@ func TestSchedule_NextRunAfterTime(t *testing.T) {
 
 	schedule = Schedule{
 		Times:    []TimeOfDay{TimeOfDay{8, 30, 0, 0}, TimeOfDay{20, 0, 0, 0}},
-		Weekdays: everyDay,
+		Weekdays: EveryDay,
 		From:     &Date{0, 12, 15},
 		To:       &Date{0, 1, 15},
 	}

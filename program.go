@@ -28,6 +28,7 @@ func (data *ProgItemJSON) ToProgItem(sections []Section) (pi *ProgItem, err erro
 	}
 	if err = CheckRange(&data.Section, "section id", len(sections)); err != nil {
 		err = fmt.Errorf("invalid program item section id: %v", err)
+		return
 	}
 	pi = &ProgItem{sections[data.Section], dur}
 	return
@@ -58,6 +59,34 @@ const (
 
 type ProgSequence []ProgItem
 
+type ProgSequenceJSON []ProgItemJSON
+
+func (seq ProgSequence) ToJSON(sections []Section) (seqj ProgSequenceJSON, err error) {
+	seqj = make(ProgSequenceJSON, len(seq))
+	var pi *ProgItemJSON
+	for i, _ := range seq {
+		pi, err = seq[i].ToJSON(sections)
+		if err != nil {
+			return
+		}
+		seqj[i] = *pi
+	}
+	return
+}
+
+func (seqj ProgSequenceJSON) ToSequence(sections []Section) (seq ProgSequence, err error) {
+	seq = make(ProgSequence, len(seqj))
+	var pi *ProgItem
+	for i, _ := range seqj {
+		pi, err = seqj[i].ToProgItem(sections)
+		if err != nil {
+			return
+		}
+		seq[i] = *pi
+	}
+	return
+}
+
 type Program struct {
 	Name     string
 	Sequence ProgSequence
@@ -80,34 +109,27 @@ func NewProgram(name string, sequence []ProgItem, schedule Schedule, enabled boo
 	return prog
 }
 
-type ProgSequenceJSON []ProgItemJSON
-
-func (seq ProgSequenceJSON) ToSequence(sections []Section) (sequence ProgSequence, err error) {
-	sequence = make(ProgSequence, len(seq))
-	var pi *ProgItem
-	for i, _ := range seq {
-		pi, err = seq[i].ToProgItem(sections)
-		if err != nil {
-			return
-		}
-		sequence[i] = *pi
-	}
-	return
-}
-
 type ProgramJSON struct {
 	Name     *string          `json:"name"`
-	Sequence ProgSequenceJSON `json:"sequence"`
+	Sequence *ProgSequenceJSON `json:"sequence"`
 	Sched    *Schedule        `json:"sched"`
 	Enabled  *bool            `json:"enabled"`
 	Running  *bool            `json:"running,omitempty"`
 }
 
+func NewProgramJSON(name string, sequence ProgSequenceJSON, sched *Schedule, enabled bool) ProgramJSON {
+	return ProgramJSON{
+		&name, &sequence, sched, &enabled, nil,
+	}
+}
+
 func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
+	var (
+		sequence []ProgItem; schedule = Schedule{}; enabled = false;
+	)
 	if err = CheckNotNil(p.Name, "name"); err != nil {
 		return
 	}
-	var sequence []ProgItem
 	if err = CheckNotNil(p.Sequence, "sequence"); err != nil {
 		return
 	} else {
@@ -116,27 +138,22 @@ func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
 			return
 		}
 	}
-	if err = CheckNotNil(p.Sched, "sched"); err != nil {
-		return
+	if p.Sched != nil {
+		schedule = *p.Sched
 	}
-	if err = CheckNotNil(p.Enabled, "enabled"); err != nil {
-		return
+	if p.Enabled != nil {
+		enabled = *p.Enabled
 	}
-	prog = NewProgram(*p.Name, sequence, *p.Sched, *p.Enabled)
+	prog = NewProgram(*p.Name, sequence, schedule, enabled)
 	return
 }
 
 func (prog *Program) ToJSON(sections []Section) (data ProgramJSON, err error) {
-	sequence := make([]ProgItemJSON, len(prog.Sequence))
-	var pi *ProgItemJSON
-	for i, _ := range prog.Sequence {
-		pi, err = prog.Sequence[i].ToJSON(sections)
-		if err != nil {
-			return
-		}
-		sequence[i] = *pi
+	sequence, err := prog.Sequence.ToJSON(sections)
+	if err != nil {
+		return
 	}
-	data = ProgramJSON{&prog.Name, sequence, &prog.Sched, &prog.Enabled, &prog.running}
+	data = ProgramJSON{&prog.Name, &sequence, &prog.Sched, &prog.Enabled, &prog.running}
 	return
 }
 
