@@ -1,5 +1,6 @@
-ifneq ("$(wildcard $(.env))","")
-include .env
+ifneq ($(wildcard ./.env),)
+$(info using variables from .env file)
+include ./.env
 endif
 
 BINARY     = ./grinklers
