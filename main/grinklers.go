@@ -46,15 +46,18 @@ func main() {
 
 	godotenv.Load()
 
+	err := g.InitSection()
+	if err != nil {
+		log.WithError(err).Fatalf("error initializing sections")
+	}
+	defer g.CleanupSection()
+
 	sections, programs, err := loadConfig()
 	if err != nil {
-		log.Fatalf("error loading config: %v", err)
+		log.WithError(err).Fatalf("error loading config")
 	}
 
 	secRunner := g.NewSectionRunner()
-
-	g.InitSection()
-	defer g.CleanupSection()
 
 	updater := g.NewMQTTUpdater(sections, programs)
 

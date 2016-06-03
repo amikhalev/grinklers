@@ -11,7 +11,7 @@ GO_PACKAGE_PATHS := $(subst $(word 1,$(GO_PACKAGES)),./,$(GO_PACKAGES))
 GO_SOURCES       := $(shell find . -type f -name '*.go' -not -name '*_test.go')
 GO_TESTS         := $(shell find . -type f -name '*_test.go')
 
-STATIC_FILES = config.json
+STATIC_FILES = config.example.json
 
 COV_OUTPUT  := coverage.out
 COV_OUTPUTS := $(addsuffix /$(COV_OUTPUT),$(GO_PACKAGE_PATHS))
@@ -22,8 +22,7 @@ DEPLOY_DIR    = ./rpi_deploy
 DEPLOY_BINARY = $(DEPLOY_DIR)/grinklers
 DEPLOY_ENV    = GOOS=linux GOARCH=arm GOARM=6
 DEPLOY_FILES  = $(addprefix $(DEPLOY_DIR)/,$(STATIC_FILES))
-DEPLOY_HOST  ?= 192.168.1.30
-DEPLOY_USER  ?= alex
+DEPLOY_HOST  ?= alex@192.168.1.30
 DEPLOY_PATH  ?= /home/alex/grinklers
 
 CLEAN_FILES = $(BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
@@ -68,10 +67,11 @@ $(DEPLOY_DIR):
 	mkdir -p $(DEPLOY_DIR)
 
 $(DEPLOY_BINARY): $(GO_SOURCES) $(DEPLOY_DIR)
-	$(DEPLOY_ENV) $(GO) build -o $(DEPLOY_BINARY)
+	$(DEPLOY_ENV) $(GO) build -o $(DEPLOY_BINARY) ./main
 
 $(DEPLOY_FILES): $(DEPLOY_DIR)/%: ./%
 	cp $< $@
 
 deploy: $(DEPLOY_DIR) $(DEPLOY_BINARY) $(DEPLOY_FILES)
-	scp $(DEPLOY_DIR)/ $(DEPLOY_USER)@$(DEPLOY_HOST):$(DEPLOY_PATH)
+	scp -r $(DEPLOY_DIR)/* $(DEPLOY_HOST):$(DEPLOY_PATH)/
+	@echo "deploy successfully completed"

@@ -35,10 +35,11 @@ To get test coverage:
 make cover
 ```
     
-To deploy to a Raspberry PI:
+To deploy to a Raspberry PI (note: any files in `./rpi_deploy` will be
+deployed, so beware of overriding configuration files):
 
 ```shell
-DEPLOY_HOST=<host> DEPLOY_USER=<user> DEPLOY_PATH=<path> make deploy
+DEPLOY_HOST=<user@host:port> DEPLOY_PATH=<path> make deploy
 ```
 
 Environment variables will be loaded from a `.env` file in the root
