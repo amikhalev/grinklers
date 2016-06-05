@@ -14,6 +14,7 @@ GO_TESTS         := $(shell find . -type f -name '*_test.go')
 
 STATIC_FILES = config.example.json
 
+TEST_TIMEOUT = 10s
 COV_OUTPUT  := coverage.out
 COV_OUTPUTS := $(addsuffix /$(COV_OUTPUT),$(GO_PACKAGE_PATHS))
 COV_ALL     := ./coverage.all.out
@@ -46,10 +47,10 @@ run: $(BINARY)
 	$(BINARY)
 
 test: $(GO_SOURCES) $(GO_TESTS)
-	$(GO) test $(GO_PACKAGES)
+	$(GO) test -timeout $(TEST_TIMEOUT) $(GO_PACKAGES)
 
 $(COV_OUTPUTS): %: $(GO_SOURCES) $(GO_TESTS)
-	$(GO) test ./$(@D) -coverprofile=$@
+	$(GO) test ./$(@D) -timeout $(TEST_TIMEOUT) -coverprofile=$@
 	@if [ ! -f $@ ]; then touch $@; fi
 
 $(COV_ALL): $(COV_OUTPUTS)

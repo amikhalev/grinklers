@@ -1,31 +1,31 @@
 package sched
 
 import (
-	"testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestParseError(t *testing.T) {
 	ass := assert.New(t)
 	bytes := []byte("hello 1234")
 
-	ass.NotPanics(func () {
+	ass.NotPanics(func() {
 		newParseError("asdf", bytes, 0, 10)
 	})
-	ass.Panics(func () {
+	ass.Panics(func() {
 		newParseError("", bytes, -1, 10)
 	})
-	ass.Panics(func () {
+	ass.Panics(func() {
 		newParseError("", bytes, 11, 12)
 	})
-	ass.Panics(func () {
+	ass.Panics(func() {
 		newParseError("", bytes, 0, 11)
 	})
-	ass.Panics(func () {
+	ass.Panics(func() {
 		newParseError("", bytes, 0, -1)
 	})
-	ass.Panics(func () {
+	ass.Panics(func() {
 		newParseError("", bytes, 4, 3)
 	})
 	err := newParseError("asdf", bytes, 5, 8)
@@ -51,8 +51,8 @@ func assertTokenType(t *testing.T, tok token, ty TokenType) {
 
 func TestTokenize(t *testing.T) {
 	tokens, err := tokenize([]byte("1234567890 / : At Am Pm On And Also Through " +
-	"Thru - From Starting To Until Mon Monday Tue Tuesday Wed Wednesday " +
-	"Thu Thur Thursday Fri Friday Sat Saturday Sun Sunday "))
+		"Thru - From Starting To Until Mon Monday Tue Tuesday Wed Wednesday " +
+		"Thu Thur Thursday Fri Friday Sat Saturday Sun Sunday "))
 	if err != nil {
 		t.Errorf("tokenize returned err: %v", err)
 		return
@@ -100,7 +100,7 @@ func TestToken_String(t *testing.T) {
 	assert.Equal(t, "SUN(SUNDAY)", tok.String())
 }
 
-var noErrorStrs = []string {
+var noErrorStrs = []string{
 	"At 12 am and 9:0:0 pm on mon, tue-thur and fri from 4/20 until 12/1",
 	"At 12 On Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday",
 	"At 12",
@@ -110,7 +110,7 @@ var noErrorStrs = []string {
 	"at 12 from 12/01/2000",
 }
 
-var errorStrs = []string {
+var errorStrs = []string{
 	"At 12 On 12",
 	"At 12 On",
 	"At 12 On Monday Tuesday",

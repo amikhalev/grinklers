@@ -2,8 +2,8 @@ package sched
 
 import (
 	"fmt"
-	"time"
 	"log"
+	"time"
 )
 
 var EveryDay = []time.Weekday{
@@ -35,20 +35,20 @@ func (t *TimeOfDay) String() string {
 }
 
 type Date struct {
-	Year  int       `json:"year"`
+	Year  int        `json:"year"`
 	Month time.Month `json:"month"`
-	Day   int       `json:"day"`
+	Day   int        `json:"day"`
 }
 
 func DateFromTime(t time.Time) Date {
 	return Date{t.Year(), t.Month(), t.Day()}
 }
 
-func (d *Date) ToTime() (time.Time) {
+func (d *Date) ToTime() time.Time {
 	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.Local)
 }
 
-func (d *Date) WithResolvedYear() (Date) {
+func (d *Date) WithResolvedYear() Date {
 	if d.Year == 0 {
 		return Date{time.Now().Year(), d.Month, d.Day}
 	}
@@ -112,7 +112,9 @@ func (sched *Schedule) NextRunTime() *time.Time {
 
 func (sched *Schedule) NextRunAfterTime(timeReference time.Time) *time.Time {
 	var (
-		nextRunTime *time.Time; to *Date; from *Date;
+		nextRunTime *time.Time
+		to          *Date
+		from        *Date
 	)
 	if sched.To != nil {
 		to = &Date{}

@@ -10,6 +10,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	g "github.com/amikhalev/grinklers"
 	"github.com/joho/godotenv"
+	"sync"
 )
 
 type ConfigDataJson struct {
@@ -57,7 +58,10 @@ func main() {
 		log.WithError(err).Fatalf("error loading config")
 	}
 
+	waitGroup := sync.WaitGroup{}
+
 	secRunner := g.NewSectionRunner()
+	secRunner.Start(&waitGroup)
 
 	updater := g.NewMQTTUpdater(sections, programs)
 
@@ -66,7 +70,7 @@ func main() {
 		sections[i].SetState(false)
 	}
 	for i, _ := range programs {
-		programs[i].Start(secRunner)
+		programs[i].Start(secRunner, &waitGroup)
 	}
 	log.WithFields(log.Fields{
 		"lenSections": len(sections), "lenPrograms": len(programs),

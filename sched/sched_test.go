@@ -1,18 +1,18 @@
 package sched
 
 import (
+	"encoding/json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
-	"github.com/stretchr/testify/assert"
-	"encoding/json"
-	"github.com/stretchr/testify/require"
 )
 
 func TestTimeOfDay(t *testing.T) {
 	ass := assert.New(t)
 	tod := TimeOfDay{1, 2, 3, 0}
 	dur := tod.Duration()
-	ass.Equal(float64(3 + 2 * 60 + 1 * (60 * 60)), dur.Seconds())
+	ass.Equal(float64(3+2*60+1*(60*60)), dur.Seconds())
 	ass.Equal("01:02:03:0000", tod.String())
 
 	var tod2 TimeOfDay

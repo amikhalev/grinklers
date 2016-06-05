@@ -2,7 +2,6 @@ package grinklers
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"testing"
 	"time"
 
@@ -10,6 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"sync"
+	"github.com/stretchr/testify/suite"
+	"os"
+	"github.com/Sirupsen/logrus"
+	"io/ioutil"
 )
 
 func makeSchedule() Schedule {
@@ -24,9 +28,8 @@ func makeSchedule() Schedule {
 
 func TestProgItem_JSON(t *testing.T) {
 	ass := assert.New(t)
-	Logger.Out = ioutil.Discard
-
-	sections := []Section {
+	req := require.New(t)
+	sections := []Section{
 		&RpioSection{}, &RpioSection{},
 	}
 
@@ -36,12 +39,12 @@ func TestProgItem_JSON(t *testing.T) {
 	}`
 	var pij ProgItemJSON
 	err := json.Unmarshal([]byte(str), &pij)
-	require.NoError(t, err)
+	req.NoError(err)
 	ass.Equal(1, pij.Section)
 	ass.Equal("1m", pij.Duration)
 
 	pi, err := pij.ToProgItem(sections)
-	require.NoError(t, err)
+	req.NoError(err)
 	ass.Equal(float64(1.0), pi.Duration.Minutes())
 	ass.Equal(sections[1], pi.Sec)
 
@@ -55,7 +58,7 @@ func TestProgItem_JSON(t *testing.T) {
 	ass.Error(err)
 
 	pij2, err := pi.ToJSON(sections)
-	require.NoError(t, err)
+	req.NoError(err)
 	ass.Equal(1, pij2.Section)
 	ass.Equal("1m0s", pij2.Duration)
 
@@ -65,9 +68,8 @@ func TestProgItem_JSON(t *testing.T) {
 }
 
 func TestProgram_JSON(t *testing.T) {
-	Logger.Out = ioutil.Discard
 	ass := assert.New(t)
-
+	req := require.New(t)
 	sections := []Section{
 		&RpioSection{}, &RpioSection{},
 	}
@@ -91,12 +93,12 @@ func TestProgram_JSON(t *testing.T) {
 	   }`
 	var progJson ProgramJSON
 	err := json.Unmarshal([]byte(str), &progJson)
-	require.NoError(t, err)
+	req.NoError(err)
 	prog, err := progJson.ToProgram(sections)
-	require.NoError(t, err)
+	req.NoError(err)
 	ass.Equal("test 1234", prog.Name)
 	ass.Equal(true, prog.Enabled)
-	ass.Equal(ProgItem{sections[0], 1*time.Hour + 2*time.Minute + 3*time.Second}, prog.Sequence[0])
+	ass.Equal(ProgItem{sections[0], 1 * time.Hour + 2 * time.Minute + 3 * time.Second}, prog.Sequence[0])
 	ass.Equal(ProgItem{sections[1], 24 * time.Millisecond}, prog.Sequence[1])
 	ass.Equal(TimeOfDay{1, 2, 0, 0}, prog.Sched.Times[0])
 	ass.Contains(prog.Sched.Weekdays, time.Monday)
@@ -124,223 +126,20 @@ func TestProgram_JSON(t *testing.T) {
 	ass.Error(err)
 
 	progJson, err = prog.ToJSON(sections)
-	require.NoError(t, err)
+	req.NoError(err)
 
 	prog.Sequence[0].Sec = &RpioSection{}
 	_, err = prog.ToJSON(sections)
 	ass.Error(err)
 
 	_, err = json.Marshal(&progJson)
-	require.NoError(t, err)
-}
-
-func TestProgram_Run(t *testing.T) {
-	sec1 := newMockSection("sec1")
-	sec2 := newMockSection("sec2")
-
-	secRunner := NewSectionRunner()
-
-	onUpdate := make(chan *Program, 10)
-
-	prog := NewProgram("test", []ProgItem{
-		ProgItem{sec1, 10 * time.Millisecond},
-		ProgItem{sec2, 10 * time.Millisecond},
-	}, Schedule{}, false)
-	prog.OnUpdate = onUpdate
-	prog.Start(secRunner)
-
-	sec1.On("SetState", true).Return().
-		Run(func(_ mock.Arguments) {
-			sec1.On("SetState", false).Return().
-				Run(func(_ mock.Arguments) {
-					sec2.On("SetState", true).Return().
-						Run(func(_ mock.Arguments) {
-							sec2.On("SetState", false).Return()
-						})
-				})
-		})
-
-	prog.Run()
-
-	p := <-onUpdate
-	assert.Equal(t, prog, p)
-	assert.Equal(t, true, prog.running)
-
-	p = <-onUpdate
-	assert.Equal(t, prog, p)
-	assert.Equal(t, false, prog.running)
-
-	sec1.AssertExpectations(t)
-	sec2.AssertExpectations(t)
-
-	prog.Quit()
-}
-
-func TestProgram_Schedule(t *testing.T) {
-	//logger.SetHandler(log15.StdoutHandler)
-	sec1 := newMockSection("sec1")
-	sec2 := newMockSection("sec2")
-
-	sec1.On("SetState", true).Return()
-	sec1.On("SetState", false).Return()
-	sec2.On("SetState", true).Return()
-	sec2.On("SetState", false).Return()
-
-	secRunner := NewSectionRunner()
-
-	prog := NewProgram("test", []ProgItem{
-		ProgItem{sec1, 25 * time.Millisecond},
-		ProgItem{sec2, 25 * time.Millisecond},
-	}, makeSchedule(), true)
-	prog.Start(secRunner)
-
-	time.Sleep(50 * time.Millisecond)
-	assert.Equal(t, true, prog.running)
-	time.Sleep(50 * time.Millisecond)
-	assert.Equal(t, false, prog.running)
-
-	prog.Quit()
-}
-
-func TestProgram_OnUpdate(t *testing.T) {
-	sec1 := newMockSection("sec1")
-	sec2 := newMockSection("sec2")
-
-	sec1.On("SetState", true).Return()
-	sec1.On("SetState", false).Return()
-	sec2.On("SetState", true).Return()
-	sec2.On("SetState", false).Return()
-
-	secRunner := NewSectionRunner()
-
-	prog := NewProgram("test", []ProgItem{
-		ProgItem{sec1, 25 * time.Millisecond},
-		ProgItem{sec2, 25 * time.Millisecond},
-	}, makeSchedule(), true)
-	prog.Start(secRunner)
-
-	time.Sleep(50 * time.Millisecond)
-	assert.Equal(t, true, prog.running)
-	time.Sleep(50 * time.Millisecond)
-	assert.Equal(t, false, prog.running)
-
-	prog.Quit()
-}
-
-func TestProgram_DoubleRun(t *testing.T) {
-	sec1 := newMockSection("sec1")
-	sec2 := newMockSection("sec2")
-
-	sec1.On("SetState", true).Return()
-	sec1.On("SetState", false).Return()
-	sec2.On("SetState", true).Return()
-	sec2.On("SetState", false).Return()
-
-	secRunner := NewSectionRunner()
-
-	prog := NewProgram("test", []ProgItem{
-		ProgItem{sec1, 25 * time.Millisecond},
-		ProgItem{sec2, 25 * time.Millisecond},
-	}, Schedule{}, false)
-	prog.Start(secRunner)
-
-	prog.Run()
-	prog.Run()
-	time.Sleep(15 * time.Millisecond)
-	assert.Equal(t, true, prog.running)
-	time.Sleep(60 * time.Millisecond)
-	assert.Equal(t, false, prog.running)
-
-	prog.Quit()
-
-	sec1.AssertNumberOfCalls(t, "SetState", 2)
-	sec2.AssertNumberOfCalls(t, "SetState", 2)
-}
-
-func TestProgram_Cancel(t *testing.T) {
-	sec1 := newMockSection("sec1")
-	sec2 := newMockSection("sec2")
-
-	sec1.On("SetState", true).Return()
-	sec1.On("SetState", false).Return()
-	sec2.On("SetState", true).Return()
-	sec2.On("SetState", false).Return()
-
-	secRunner := NewSectionRunner()
-
-	prog := NewProgram("test", []ProgItem{
-		ProgItem{sec1, 25 * time.Millisecond},
-		ProgItem{sec2, 25 * time.Millisecond},
-	}, Schedule{}, false)
-	prog.Start(secRunner)
-
-	prog.Run()
-	time.Sleep(15 * time.Millisecond)
-	assert.Equal(t, true, prog.running)
-	prog.Cancel()
-	time.Sleep(15 * time.Millisecond)
-	assert.Equal(t, false, prog.running)
-	time.Sleep(50 * time.Millisecond)
-
-	prog.Quit()
-
-	sec1.AssertNumberOfCalls(t, "SetState", 2)
-	sec2.AssertNumberOfCalls(t, "SetState", 0)
-}
-
-func TestProgram_Update(t *testing.T) {
-	ass := assert.New(t)
-	sec1 := newMockSection("sec1")
-	sec2 := newMockSection("sec2")
-
-	sec1.On("SetState", true).Return()
-	sec1.On("SetState", false).Return()
-	sec2.On("SetState", true).Return()
-	sec2.On("SetState", false).Return()
-
-	secRunner := NewSectionRunner()
-
-	prog := NewProgram("test", []ProgItem{
-		ProgItem{sec1, 25 * time.Millisecond},
-	}, makeSchedule(), false)
-
-	prog.Start(secRunner)
-
-	time.Sleep(20 * time.Millisecond)
-	ass.Equal(false, prog.running)
-	time.Sleep(20 * time.Millisecond)
-	ass.Equal(false, prog.running)
-
-	newSeq := ProgSequenceJSON{
-		ProgItemJSON{0, "25ms"},
-		ProgItemJSON{1, "25ms"},
-	}
-	newSched := makeSchedule()
-	err := prog.Update(NewProgramJSON("test2", newSeq, &newSched, true), []Section{sec1, sec2})
-	require.NoError(t, err)
-
-	ass.Equal("test2", prog.Name)
-	require.Len(t, prog.Sequence, 2)
-	ass.Equal(true, prog.Enabled)
-
-	time.Sleep(20 * time.Millisecond)
-	ass.Equal(true, prog.running)
-	time.Sleep(60 * time.Millisecond)
-	ass.Equal(false, prog.running)
-
-	prog.Quit()
-
-	sec1.AssertNumberOfCalls(t, "SetState", 2)
-	sec2.AssertNumberOfCalls(t, "SetState", 2)
-
-	newSeq[0].Section = 3
-	err = prog.Update(ProgramJSON{nil, &newSeq, nil, nil, nil}, []Section{sec1, sec2})
-	ass.Error(err)
+	req.NoError(err)
 }
 
 func TestPrograms_JSON(t *testing.T) {
 	ass := assert.New(t)
-	sections := []Section {
+	req := require.New(t)
+	sections := []Section{
 		&RpioSection{}, &RpioSection{},
 	}
 
@@ -356,29 +155,29 @@ func TestPrograms_JSON(t *testing.T) {
 
 	var psj ProgramsJSON
 	err := json.Unmarshal([]byte(str), &psj)
-	require.NoError(t, err)
+	req.NoError(err)
 
-	require.Len(t, psj, 2)
+	req.Len(psj, 2)
 
 	ass.Equal("p1", *psj[0].Name)
 	ass.Len(*psj[0].Sequence, 0)
 
 	ass.Equal("p2", *psj[1].Name)
-	require.Len(t, *psj[1].Sequence, 1)
+	req.Len(*psj[1].Sequence, 1)
 	ass.Equal(0, (*psj[1].Sequence)[0].Section)
 	ass.Equal("1m", (*psj[1].Sequence)[0].Duration)
 	ass.Equal(true, *psj[1].Enabled)
 
 	ps, err := psj.ToPrograms(sections)
-	require.NoError(t, err)
+	req.NoError(err)
 
-	require.Len(t, ps, 2)
+	req.Len(ps, 2)
 	ass.Equal("p1", ps[0].Name)
 	ass.Len(ps[0].Sequence, 0)
 	ass.Equal(false, ps[0].Enabled)
 
 	ass.Equal("p2", ps[1].Name)
-	require.Len(t, ps[1].Sequence, 1)
+	req.Len(ps[1].Sequence, 1)
 	ass.Equal(sections[0], ps[1].Sequence[0].Sec)
 	ass.Equal("1m0s", ps[1].Sequence[0].Duration.String())
 	ass.Equal(true, ps[1].Enabled)
@@ -388,15 +187,15 @@ func TestPrograms_JSON(t *testing.T) {
 	ass.Error(err)
 
 	psj, err = ProgramsToJSON(ps, sections)
-	require.NoError(t, err)
+	req.NoError(err)
 
-	require.Len(t, psj, 2)
+	req.Len(psj, 2)
 
 	ass.Equal("p1", *psj[0].Name)
 	ass.Len(*psj[0].Sequence, 0)
 
 	ass.Equal("p2", *psj[1].Name)
-	require.Len(t, *psj[1].Sequence, 1)
+	req.Len(*psj[1].Sequence, 1)
 	ass.Equal(0, (*psj[1].Sequence)[0].Section)
 	ass.Equal("1m0s", (*psj[1].Sequence)[0].Duration)
 	ass.Equal(true, *psj[1].Enabled)
@@ -404,4 +203,212 @@ func TestPrograms_JSON(t *testing.T) {
 	ps[1].Sequence[0].Sec = &RpioSection{}
 	_, err = ProgramsToJSON(ps, sections)
 	ass.Error(err)
+}
+
+type ProgramSuite struct {
+	ass       *assert.Assertions
+	req       *require.Assertions
+	sec1      *MockSection
+	sec2      *MockSection
+	secRunner *SectionRunner
+	waitGroup *sync.WaitGroup
+	program   *Program
+	suite.Suite
+}
+
+func (s *ProgramSuite) SetupSuite() {
+	s.ass = assert.New(s.T())
+	s.req = require.New(s.T())
+	s.waitGroup = &sync.WaitGroup{}
+}
+
+func (s *ProgramSuite) SetupTest() {
+	Logger.Out = ioutil.Discard
+	/*Logger.Out =*/ _ = os.Stdout
+	Logger.Level = logrus.DebugLevel
+	Logger.Warn("ayyyo")
+	s.sec1 = newMockSection("sec1")
+	s.sec2 = newMockSection("sec2")
+	s.secRunner = NewSectionRunner()
+	s.secRunner.Start(s.waitGroup)
+}
+
+func (s *ProgramSuite) TearDownTest() {
+	s.secRunner.Quit()
+	s.waitGroup.Wait()
+}
+
+func (s *ProgramSuite) TestProgram_Run() {
+	ass, secRunner := s.ass, s.secRunner
+
+	onUpdate := make(chan *Program, 10)
+
+	prog := NewProgram("test_run", []ProgItem{
+		ProgItem{s.sec1, 10 * time.Millisecond},
+		ProgItem{s.sec2, 10 * time.Millisecond},
+	}, Schedule{}, false)
+	prog.OnUpdate = onUpdate
+	prog.Start(secRunner, s.waitGroup)
+
+	s.sec1.On("SetState", true).Return().
+	Run(func(_ mock.Arguments) {
+		s.sec1.On("SetState", false).Return().
+		Run(func(_ mock.Arguments) {
+			s.sec2.On("SetState", true).Return().
+			Run(func(_ mock.Arguments) {
+				s.sec2.On("SetState", false).Return()
+			})
+		})
+	})
+
+	prog.Run()
+
+	p := <-onUpdate
+	ass.Equal(prog, p)
+	ass.Equal(true, prog.Running())
+
+	p = <-onUpdate
+	ass.Equal(prog, p)
+	ass.Equal(false, prog.Running())
+
+	s.sec1.AssertExpectations(s.T())
+	s.sec2.AssertExpectations(s.T())
+
+	prog.Quit()
+}
+
+func (s *ProgramSuite) SetupSecs() {
+	s.sec1.On("SetState", true).Return()
+	s.sec1.On("SetState", false).Return()
+	s.sec2.On("SetState", true).Return()
+	s.sec2.On("SetState", false).Return()
+}
+
+func (s *ProgramSuite) TestProgram_Schedule() {
+	ass, secRunner := s.ass, s.secRunner
+	s.SetupSecs()
+
+	prog := NewProgram("test_schedule", []ProgItem{
+		ProgItem{s.sec1, 25 * time.Millisecond},
+		ProgItem{s.sec2, 25 * time.Millisecond},
+	}, makeSchedule(), true)
+	prog.Start(secRunner, s.waitGroup)
+
+	time.Sleep(50 * time.Millisecond)
+	ass.Equal(true, prog.Running())
+	time.Sleep(50 * time.Millisecond)
+	ass.Equal(false, prog.Running())
+
+	prog.Quit()
+}
+
+func (s *ProgramSuite) TestProgram_OnUpdate() {
+	ass, secRunner := s.ass, s.secRunner
+	s.SetupSecs()
+
+	prog := NewProgram("test_onupdate", []ProgItem{
+		ProgItem{s.sec1, 25 * time.Millisecond},
+		ProgItem{s.sec2, 25 * time.Millisecond},
+	}, makeSchedule(), true)
+	prog.Start(secRunner, s.waitGroup)
+
+	time.Sleep(50 * time.Millisecond)
+	ass.Equal(true, prog.Running())
+	time.Sleep(50 * time.Millisecond)
+	ass.Equal(false, prog.Running())
+
+	prog.Quit()
+}
+
+func (s *ProgramSuite) TestProgram_DoubleRun() {
+	ass, secRunner := s.ass, s.secRunner
+	s.SetupSecs()
+
+	prog := NewProgram("test_doublerun", []ProgItem{
+		ProgItem{s.sec1, 25 * time.Millisecond},
+		ProgItem{s.sec2, 25 * time.Millisecond},
+	}, Schedule{}, false)
+	prog.Start(secRunner, s.waitGroup)
+
+	prog.Run()
+	prog.Run()
+	time.Sleep(15 * time.Millisecond)
+	ass.Equal(true, prog.Running())
+	time.Sleep(60 * time.Millisecond)
+	ass.Equal(false, prog.Running())
+
+	prog.Quit()
+
+	s.sec1.AssertNumberOfCalls(s.T(), "SetState", 2)
+	s.sec1.AssertNumberOfCalls(s.T(), "SetState", 2)
+}
+
+func (s *ProgramSuite) TestProgram_Cancel() {
+	ass, secRunner := s.ass, s.secRunner
+	s.SetupSecs()
+
+	prog := NewProgram("test_cancel", []ProgItem{
+		ProgItem{s.sec1, 25 * time.Millisecond},
+		ProgItem{s.sec2, 25 * time.Millisecond},
+	}, Schedule{}, false)
+	prog.Start(secRunner, nil)
+
+	prog.Run()
+	time.Sleep(15 * time.Millisecond)
+	ass.Equal(true, prog.Running())
+	prog.Cancel()
+	time.Sleep(15 * time.Millisecond)
+	ass.Equal(false, prog.Running())
+	time.Sleep(50 * time.Millisecond)
+
+	prog.Quit()
+
+	s.sec1.AssertNumberOfCalls(s.T(), "SetState", 2)
+	s.sec2.AssertNumberOfCalls(s.T(), "SetState", 0)
+}
+
+func (s *ProgramSuite) TestProgram_Update() {
+	ass, req, secRunner := s.ass, s.req, s.secRunner
+	s.SetupSecs()
+
+	prog := NewProgram("test_update", []ProgItem{
+		ProgItem{s.sec1, 25 * time.Millisecond},
+	}, makeSchedule(), false)
+
+	prog.Start(secRunner, nil)
+
+	time.Sleep(20 * time.Millisecond)
+	ass.Equal(false, prog.Running())
+	time.Sleep(20 * time.Millisecond)
+	ass.Equal(false, prog.Running())
+
+	newSeq := ProgSequenceJSON{
+		ProgItemJSON{0, "25ms"},
+		ProgItemJSON{1, "25ms"},
+	}
+	newSched := makeSchedule()
+	err := prog.Update(NewProgramJSON("test2", newSeq, &newSched, true), []Section{s.sec1, s.sec2})
+	req.NoError(err)
+
+	ass.Equal("test2", prog.Name)
+	req.Len(prog.Sequence, 2)
+	ass.Equal(true, prog.Enabled)
+
+	time.Sleep(20 * time.Millisecond)
+	ass.Equal(true, prog.Running())
+	time.Sleep(60 * time.Millisecond)
+	ass.Equal(false, prog.Running())
+
+	prog.Quit()
+
+	s.sec1.AssertNumberOfCalls(s.T(), "SetState", 2)
+	s.sec2.AssertNumberOfCalls(s.T(), "SetState", 2)
+
+	newSeq[0].Section = 3
+	err = prog.Update(ProgramJSON{nil, &newSeq, nil, nil, nil}, []Section{s.sec1, s.sec2})
+	ass.Error(err)
+}
+
+func TestProgramSuite(t *testing.T) {
+	suite.Run(t, new(ProgramSuite))
 }

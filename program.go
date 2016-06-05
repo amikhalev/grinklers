@@ -93,7 +93,7 @@ type Program struct {
 	Sched    Schedule
 	Enabled  bool
 	mutex    *sync.Mutex
-	running  bool
+	running  AtomicBool
 	runner   chan ProgRunnerMsg
 	OnUpdate chan<- *Program
 	log      *logrus.Entry
@@ -103,18 +103,18 @@ func NewProgram(name string, sequence []ProgItem, schedule Schedule, enabled boo
 	runner := make(chan ProgRunnerMsg)
 	prog := &Program{
 		name, sequence, schedule, enabled,
-		&sync.Mutex{}, false, runner, nil,
+		&sync.Mutex{}, NewAtomicBool(false), runner, nil,
 		Logger.WithField("program", name),
 	}
 	return prog
 }
 
 type ProgramJSON struct {
-	Name     *string          `json:"name"`
+	Name     *string           `json:"name"`
 	Sequence *ProgSequenceJSON `json:"sequence"`
-	Sched    *Schedule        `json:"sched"`
-	Enabled  *bool            `json:"enabled"`
-	Running  *bool            `json:"running,omitempty"`
+	Sched    *Schedule         `json:"sched"`
+	Enabled  *bool             `json:"enabled"`
+	Running  *bool             `json:"running,omitempty"`
 }
 
 func NewProgramJSON(name string, sequence ProgSequenceJSON, sched *Schedule, enabled bool) ProgramJSON {
@@ -125,7 +125,9 @@ func NewProgramJSON(name string, sequence ProgSequenceJSON, sched *Schedule, ena
 
 func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
 	var (
-		sequence []ProgItem; schedule = Schedule{}; enabled = false;
+		sequence []ProgItem
+		schedule = Schedule{}
+		enabled  = false
 	)
 	if err = CheckNotNil(p.Name, "name"); err != nil {
 		return
@@ -153,7 +155,8 @@ func (prog *Program) ToJSON(sections []Section) (data ProgramJSON, err error) {
 	if err != nil {
 		return
 	}
-	data = ProgramJSON{&prog.Name, &sequence, &prog.Sched, &prog.Enabled, &prog.running}
+	running := prog.Running()
+	data = ProgramJSON{&prog.Name, &sequence, &prog.Sched, &prog.Enabled, &running}
 	return
 }
 
@@ -175,15 +178,14 @@ func (prog *Program) onUpdate() {
 }
 
 func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
-	if prog.Running() {
+	if !prog.running.StoreIf(false, true) {
 		prog.log.Info("program was started when already running")
 		return
 	}
 	prog.log.Info("running program")
-	prog.setRunning(true)
 	prog.onUpdate()
 	stop := func() {
-		prog.setRunning(false)
+		prog.running.Store(false)
 		prog.onUpdate()
 	}
 	prog.lock()
@@ -205,7 +207,7 @@ func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
 	stop()
 }
 
-func (prog *Program) start(secRunner *SectionRunner) {
+func (prog *Program) start(secRunner *SectionRunner, wait *sync.WaitGroup) {
 	var (
 		msg     ProgRunnerMsg
 		nextRun *time.Time
@@ -214,6 +216,14 @@ func (prog *Program) start(secRunner *SectionRunner) {
 	cancelRun := make(chan int)
 	run := func() {
 		go prog.run(cancelRun, secRunner)
+	}
+	cancel := func() {
+		if prog.Running() {
+			cancelRun <- 0
+		}
+	}
+	if wait != nil {
+		defer wait.Done()
 	}
 	for {
 		prog.lock()
@@ -231,17 +241,19 @@ func (prog *Program) start(secRunner *SectionRunner) {
 			delay = nil
 			prog.log.WithFields(logrus.Fields{"enabled": prog.Enabled}).Debug("program not scheduled")
 		}
-		//prog.Debug("runner waiting for command", "delay", delay)
+		prog.log.WithField("delay", delay).Debug("runner waiting for command")
 		select {
 		case msg = <-prog.runner:
-			//prog.Debug("runner cmd", "msg", msg)
+			prog.log.WithField("cmd", msg).Debug("runner cmd")
 			switch msg {
 			case PR_QUIT:
-				cancelRun <- 0
+				cancel()
 				prog.log.Debug("quitting runner")
 				return
 			case PR_CANCEL:
-				cancelRun <- 0
+				if prog.Running() {
+					cancelRun <- 0
+				}
 			case PR_REFRESH:
 				continue
 			case PR_RUN:
@@ -253,8 +265,11 @@ func (prog *Program) start(secRunner *SectionRunner) {
 	}
 }
 
-func (prog *Program) Start(secRunner *SectionRunner) {
-	go prog.start(secRunner)
+func (prog *Program) Start(secRunner *SectionRunner, wait *sync.WaitGroup) {
+	if wait != nil {
+		wait.Add(1)
+	}
+	go prog.start(secRunner, wait)
 }
 
 func (prog *Program) Run() {
@@ -273,16 +288,8 @@ func (prog *Program) Quit() {
 	prog.runner <- PR_QUIT
 }
 
-func (prog *Program) setRunning(running bool) {
-	prog.lock()
-	defer prog.unlock()
-	prog.running = running
-}
-
 func (prog *Program) Running() bool {
-	prog.lock()
-	defer prog.unlock()
-	return prog.running
+	return prog.running.Load()
 }
 
 func (prog *Program) Update(data ProgramJSON, sections []Section) (err error) {

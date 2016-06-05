@@ -124,6 +124,9 @@ func TestRpioSection_Run(t *testing.T) {
 
 	ass := assert.New(t)
 	secRunner := NewSectionRunner()
+	secRunner.Start(nil)
+	defer secRunner.Quit()
+
 	sec := NewRpioSection("test2", 6)
 
 	ass.Equal(false, sec.State())

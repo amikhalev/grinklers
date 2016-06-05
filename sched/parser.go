@@ -1,10 +1,10 @@
 package sched
 
 import (
-	"time"
 	"fmt"
 	"regexp"
 	"strconv"
+	"time"
 )
 
 type ParseError struct {
@@ -226,7 +226,7 @@ func (p *ScheduleParser) peek2() *token {
 	//if p.nextTok + 1 >= len(p.tokens) {
 	//	return nil
 	//}
-	return &p.tokens[p.nextTok + 1]
+	return &p.tokens[p.nextTok+1]
 }
 
 func (p *ScheduleParser) nextIs2(ty TokenType) bool {
@@ -404,4 +404,3 @@ func (p *ScheduleParser) parseDate() (date *Date, err error) {
 	}
 	return &Date{year, time.Month(month), day}, nil
 }
-

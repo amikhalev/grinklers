@@ -163,19 +163,21 @@ type SectionRunnerSuite struct {
 
 func (s *SectionRunnerSuite) SetupSuite() {
 	s.ass = assert.New(s.T())
-	s.sr = NewSectionRunner()
-	s.sr.log.Logger.Out = ioutil.Discard
-	s.ass.NotNil(s.sr)
 }
 
 func (s *SectionRunnerSuite) SetupTest() {
+	Logger.Out = ioutil.Discard
 	s.sec1 = newMockSection("mock 1")
 	s.sec2 = newMockSection("mock 2")
+	s.sr = NewSectionRunner()
+	s.sr.Start(nil)
+	s.ass.NotNil(s.sr)
 }
 
 func (s *SectionRunnerSuite) TearDownTest() {
 	s.sec1.AssertExpectations(s.T())
 	s.sec2.AssertExpectations(s.T())
+	s.sr.Quit()
 }
 
 func (s *SectionRunnerSuite) TestRunSection() {

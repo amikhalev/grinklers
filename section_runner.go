@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"sync"
 )
 
 type SectionRun struct {
 	Sec      Section
 	Duration time.Duration
-	Done     chan<- int
+	Done     chan <- int
 }
 
 func (sr *SectionRun) String() string {
@@ -36,9 +37,9 @@ func (q *SRQueue) Push(item *SectionRun) {
 	q.tail = (q.tail + 1) % itemsLen
 	if q.tail == q.head {
 		// if queue is full, double storage size
-		newItems := make([]*SectionRun, len(q.items)*2)
+		newItems := make([]*SectionRun, len(q.items) * 2)
 		copy(newItems, q.items[q.head:])
-		copy(newItems[itemsLen-q.head:], q.items[:q.head])
+		copy(newItems[itemsLen - q.head:], q.items[:q.head])
 		q.head = 0
 		q.tail = itemsLen
 		q.items = newItems
@@ -83,19 +84,18 @@ func (q *SRQueue) RemoveMatchingSection(sec Section) {
 type SectionRunner struct {
 	run    chan SectionRun
 	cancel chan Section
+	quit   chan struct{}
 	log    *logrus.Entry
 }
 
 func NewSectionRunner() *SectionRunner {
-	sr := &SectionRunner{
-		make(chan SectionRun, 2), make(chan Section, 2),
+	return &SectionRunner{
+		make(chan SectionRun, 2), make(chan Section, 2), make(chan struct{}),
 		Logger.WithField("module", "SectionRunner"),
 	}
-	go sr.start()
-	return sr
 }
 
-func (r *SectionRunner) start() {
+func (r *SectionRunner) start(wait *sync.WaitGroup) {
 	queue := newSRQueue(10)
 	var (
 		currentItem *SectionRun
@@ -122,8 +122,14 @@ func (r *SectionRunner) start() {
 		}).Info("finished running section")
 		currentItem = queue.Pop()
 	}
+	if wait != nil {
+		defer wait.Done()
+	}
 	for {
 		select {
+		case <-r.quit:
+			r.log.Debug("quiting section runner")
+			return
 		case item := <-r.run:
 			if currentItem == nil {
 				currentItem = &item
@@ -148,6 +154,17 @@ func (r *SectionRunner) start() {
 			runItem()
 		}
 	}
+}
+
+func (r *SectionRunner) Start(wait *sync.WaitGroup) {
+	if wait != nil {
+		wait.Add(1)
+	}
+	go r.start(wait)
+}
+
+func (r *SectionRunner) Quit() {
+	r.quit <- struct{}{}
 }
 
 func (r *SectionRunner) QueueSectionRun(sec Section, dur time.Duration) {
