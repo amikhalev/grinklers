@@ -5,15 +5,16 @@ import (
 	"testing"
 	"time"
 
+	"io/ioutil"
+	"os"
+	"sync"
+
+	"github.com/Sirupsen/logrus"
 	. "github.com/amikhalev/grinklers/sched"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"sync"
 	"github.com/stretchr/testify/suite"
-	"os"
-	"github.com/Sirupsen/logrus"
-	"io/ioutil"
 )
 
 func makeSchedule() Schedule {
@@ -98,7 +99,7 @@ func TestProgram_JSON(t *testing.T) {
 	req.NoError(err)
 	ass.Equal("test 1234", prog.Name)
 	ass.Equal(true, prog.Enabled)
-	ass.Equal(ProgItem{sections[0], 1 * time.Hour + 2 * time.Minute + 3 * time.Second}, prog.Sequence[0])
+	ass.Equal(ProgItem{sections[0], 1*time.Hour + 2*time.Minute + 3*time.Second}, prog.Sequence[0])
 	ass.Equal(ProgItem{sections[1], 24 * time.Millisecond}, prog.Sequence[1])
 	ass.Equal(TimeOfDay{1, 2, 0, 0}, prog.Sched.Times[0])
 	ass.Contains(prog.Sched.Weekdays, time.Monday)
@@ -251,15 +252,15 @@ func (s *ProgramSuite) TestProgram_Run() {
 	prog.Start(secRunner, s.waitGroup)
 
 	s.sec1.On("SetState", true).Return().
-	Run(func(_ mock.Arguments) {
-		s.sec1.On("SetState", false).Return().
 		Run(func(_ mock.Arguments) {
-			s.sec2.On("SetState", true).Return().
-			Run(func(_ mock.Arguments) {
-				s.sec2.On("SetState", false).Return()
-			})
+			s.sec1.On("SetState", false).Return().
+				Run(func(_ mock.Arguments) {
+					s.sec2.On("SetState", true).Return().
+						Run(func(_ mock.Arguments) {
+							s.sec2.On("SetState", false).Return()
+						})
+				})
 		})
-	})
 
 	prog.Run()
 

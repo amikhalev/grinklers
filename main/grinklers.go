@@ -7,10 +7,11 @@ import (
 	"os"
 	"os/signal"
 
+	"sync"
+
 	log "github.com/Sirupsen/logrus"
 	g "github.com/amikhalev/grinklers"
 	"github.com/joho/godotenv"
-	"sync"
 )
 
 type ConfigDataJson struct {

@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"sync"
+
+	"github.com/Sirupsen/logrus"
 )
 
 type SectionRun struct {
 	Sec      Section
 	Duration time.Duration
-	Done     chan <- int
+	Done     chan<- int
 }
 
 func (sr *SectionRun) String() string {
@@ -37,9 +38,9 @@ func (q *SRQueue) Push(item *SectionRun) {
 	q.tail = (q.tail + 1) % itemsLen
 	if q.tail == q.head {
 		// if queue is full, double storage size
-		newItems := make([]*SectionRun, len(q.items) * 2)
+		newItems := make([]*SectionRun, len(q.items)*2)
 		copy(newItems, q.items[q.head:])
-		copy(newItems[itemsLen - q.head:], q.items[:q.head])
+		copy(newItems[itemsLen-q.head:], q.items[:q.head])
 		q.head = 0
 		q.tail = itemsLen
 		q.items = newItems

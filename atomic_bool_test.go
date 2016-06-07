@@ -2,6 +2,7 @@ package grinklers
 
 import (
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -10,7 +11,7 @@ func TestAtomicBool(t *testing.T) {
 
 	b := NewAtomicBool(true)
 	ass.Equal(true, b.Load())
-	ass.NotPanics(func () {
+	ass.NotPanics(func() {
 		b.Store(false)
 	})
 	ass.Equal(false, b.Load())
@@ -29,9 +30,9 @@ func TestAtomicBool(t *testing.T) {
 func TestAtomicBool_Concurrent(t *testing.T) {
 	var (
 		counter int = 0
-		ab = NewAtomicBool(false)
+		ab          = NewAtomicBool(false)
 	)
-	routine := func (){
+	routine := func() {
 		if ab.StoreIf(false, true) {
 			counter = counter + 1
 		}
