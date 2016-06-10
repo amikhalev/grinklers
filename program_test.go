@@ -242,7 +242,7 @@ func (s *ProgramSuite) TearDownTest() {
 func (s *ProgramSuite) TestProgram_Run() {
 	ass, secRunner := s.ass, s.secRunner
 
-	onUpdate := make(chan *Program, 10)
+	onUpdate := make(chan ProgUpdate, 10)
 
 	prog := NewProgram("test_run", []ProgItem{
 		ProgItem{s.sec1, 10 * time.Millisecond},
@@ -265,11 +265,13 @@ func (s *ProgramSuite) TestProgram_Run() {
 	prog.Run()
 
 	p := <-onUpdate
-	ass.Equal(prog, p)
+	ass.Equal(prog, p.Prog)
+	ass.Equal(PROG_UPDATE_RUNNING, p.Type)
 	ass.Equal(true, prog.Running())
 
 	p = <-onUpdate
-	ass.Equal(prog, p)
+	ass.Equal(prog, p.Prog)
+	ass.Equal(PROG_UPDATE_RUNNING, p.Type)
 	ass.Equal(false, prog.Running())
 
 	s.sec1.AssertExpectations(s.T())
@@ -406,7 +408,7 @@ func (s *ProgramSuite) TestProgram_Update() {
 	s.sec2.AssertNumberOfCalls(s.T(), "SetState", 2)
 
 	newSeq[0].Section = 3
-	err = prog.Update(ProgramJSON{nil, &newSeq, nil, nil, nil}, []Section{s.sec1, s.sec2})
+	err = prog.Update(ProgramJSON{nil, &newSeq, nil, nil}, []Section{s.sec1, s.sec2})
 	ass.Error(err)
 }
 

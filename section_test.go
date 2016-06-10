@@ -37,12 +37,12 @@ func TestRpioSection_JSON(t *testing.T) {
 
 	bytes, err := json.Marshal(&sec)
 	require.NoError(t, err)
-	ass.Equal(`{"name":"test1234","pin":4,"state":false}`, string(bytes))
+	ass.Equal(`{"name":"test1234","pin":4}`, string(bytes))
 
 	sec.SetState(true)
 	bytes, err = json.Marshal(&sec)
 	require.NoError(t, err)
-	ass.Equal(`{"name":"test1234","pin":4,"state":true}`, string(bytes))
+	ass.Equal(`{"name":"test1234","pin":4}`, string(bytes))
 }
 
 func TestRpioSections_JSON(t *testing.T) {
@@ -69,7 +69,7 @@ func TestRpioSection_Update(t *testing.T) {
 
 	ass := assert.New(t)
 
-	onUpdate := make(chan Section, 6)
+	onUpdate := make(chan SecUpdate, 6)
 	sec := NewRpioSection("test", 5)
 	sec.SetOnUpdate(onUpdate)
 
@@ -78,7 +78,8 @@ func TestRpioSection_Update(t *testing.T) {
 
 	select {
 	case s := <-onUpdate:
-		ass.Equal(&sec, s)
+		ass.Equal(&sec, s.Sec)
+		ass.Equal(SEC_UPDATE_STATE, s.Type)
 	default:
 		ass.Fail("no update received")
 	}
@@ -88,7 +89,8 @@ func TestRpioSection_Update(t *testing.T) {
 
 	select {
 	case s := <-onUpdate:
-		ass.Equal(&sec, s)
+		ass.Equal(&sec, s.Sec)
+		ass.Equal(SEC_UPDATE_STATE, s.Type)
 	default:
 		ass.Fail("no update received")
 	}

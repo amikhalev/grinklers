@@ -9,10 +9,22 @@ import (
 	"github.com/stianeikeland/go-rpio"
 )
 
+type SecUpdateType int
+
+const (
+	SEC_UPDATE_DATA SecUpdateType = iota
+	SEC_UPDATE_STATE
+)
+
+type SecUpdate struct {
+	Sec Section
+	Type SecUpdateType
+}
+
 type Section interface {
 	SetState(on bool)
 	State() (on bool)
-	SetOnUpdate(chan<- Section)
+	SetOnUpdate(chan<- SecUpdate)
 	Name() string
 }
 
@@ -51,7 +63,7 @@ func CleanupSection() (err error) {
 type RpioSection struct {
 	name     string
 	pin      rpio.Pin
-	onUpdate chan<- Section
+	onUpdate chan<- SecUpdate
 	log      *logrus.Entry
 }
 
@@ -68,7 +80,6 @@ func NewRpioSection(name string, pin rpio.Pin) RpioSection {
 type rpioSectionJson struct {
 	Name  string   `json:"name"`
 	Pin   rpio.Pin `json:"pin"`
-	State bool     `json:"state"`
 }
 
 func (sec *RpioSection) UnmarshalJSON(b []byte) (err error) {
@@ -81,18 +92,20 @@ func (sec *RpioSection) UnmarshalJSON(b []byte) (err error) {
 
 func (sec *RpioSection) MarshalJSON() ([]byte, error) {
 	d := rpioSectionJson{
-		sec.name, sec.pin, sec.State(),
+		sec.name, sec.pin,
 	}
 	return json.Marshal(&d)
 }
 
-func (sec *RpioSection) SetOnUpdate(onUpdate chan<- Section) {
+func (sec *RpioSection) SetOnUpdate(onUpdate chan<- SecUpdate) {
 	sec.onUpdate = onUpdate
 }
 
-func (sec *RpioSection) update() {
+func (sec *RpioSection) update(t SecUpdateType) {
 	if sec.onUpdate != nil {
-		sec.onUpdate <- sec
+		sec.onUpdate <- SecUpdate{
+			Sec: sec, Type: t,
+		}
 	}
 }
 
@@ -110,7 +123,7 @@ func (sec *RpioSection) SetState(on bool) {
 		sec.log.WithField("state", on).Debug("[stub] setting section state")
 		sectionValues[sec.pin-2] = on
 	}
-	sec.update()
+	sec.update(SEC_UPDATE_STATE)
 }
 
 func (sec *RpioSection) State() bool {

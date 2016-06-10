@@ -141,7 +141,7 @@ func (a *MQTTApi) subscribeHandler(p string, handler apiHandlerFunc) {
 				}
 			}
 			resBytes, _ := json.Marshal(&rData)
-			client.Publish(message.Topic()+"/response", 1, false, resBytes)
+			client.Publish(a.prefix + "/response", 1, false, resBytes)
 		}()
 
 		err = json.Unmarshal(message.Payload(), &data)
@@ -265,50 +265,89 @@ func (a *MQTTApi) subscribe() {
 type MQTTUpdater struct {
 	sections        []Section
 	programs        []Program
-	onSectionUpdate chan Section
-	onProgramUpdate chan *Program
+	onSectionUpdate chan SecUpdate
+	onProgramUpdate chan ProgUpdate
 	stop            chan int
 	api             *MQTTApi
 	logger          *logrus.Entry
 }
 
-func (a *MQTTApi) UpdateSections(sections []Section) (err error) {
-	bytes, err := json.Marshal(sections)
+func (a *MQTTApi) UpdateSectionData(index int, sec Section) (err error) {
+	bytes, err := json.Marshal(sec)
 	if err != nil {
-		err = fmt.Errorf("error marshalling sections: %v", err)
+		err = fmt.Errorf("error marshalling section: %v", err)
 		return
 	}
-	token := a.client.Publish(a.prefix+"/sections", 1, true, bytes)
-	if token.Wait(); token.Error() != nil {
-		err = fmt.Errorf("error publishing sections: %v", token.Error())
-		return
+	a.client.Publish(fmt.Sprintf("%s/sections/%d", a.prefix, index), 1, true, bytes)
+	return
+}
+
+func (a *MQTTApi) UpdateSectionState(index int, sec Section) (err error) {
+	bytes := []byte(strconv.FormatBool(sec.State()))
+	a.client.Publish(fmt.Sprintf("%s/sections/%d/state", a.prefix, index), 1, true, bytes)
+	return
+}
+
+func (a *MQTTApi) UpdateSections(sections []Section) (err error) {
+	lenSections := len(sections)
+	bytes := []byte(strconv.Itoa(lenSections))
+	a.client.Publish(a.prefix+"/sections", 1, true, bytes)
+	for i, sec := range sections {
+		err = a.UpdateSectionData(i, sec)
+		if err != nil {
+			return
+		}
+		err = a.UpdateSectionState(i, sec)
+		if err != nil {
+			return
+		}
 	}
 	//logger.Debug("updated sections", "bytes", string(bytes))
 	return
 }
 
-func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
-	data, err := ProgramsToJSON(programs, a.sections)
+func (a *MQTTApi) UpdateProgramData(index int, prog *Program) (err error) {
+	data, err := prog.ToJSON(a.sections)
 	if err != nil {
 		err = fmt.Errorf("error converting programs to json: %v", err)
 		return
 	}
 	bytes, err := json.Marshal(&data)
 	if err != nil {
-		err = fmt.Errorf("error marshalling programs: %v", err)
+		err = fmt.Errorf("error marshalling program: %v", err)
 		return
 	}
-	token := a.client.Publish(a.prefix+"/programs", 1, true, bytes)
-	if token.Wait(); token.Error() != nil {
-		err = fmt.Errorf("error publishing programs: %v", token.Error())
-		return
+	a.client.Publish(fmt.Sprintf("%s/programs/%d", a.prefix, index), 1, true, bytes)
+	return
+}
+
+func (a *MQTTApi) UpdateProgramRunning(index int, prog *Program) (err error) {
+	bytes := []byte(strconv.FormatBool(prog.Running()))
+	a.client.Publish(fmt.Sprintf("%s/programs/%d/running", a.prefix, index), 1, true, bytes)
+	return
+}
+
+func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
+	lenPrograms := len(programs)
+	bytes := []byte(strconv.Itoa(lenPrograms))
+	a.client.Publish(a.prefix+"/programs", 1, true, bytes)
+	for i, _ := range programs {
+		prog := &programs[i]
+		err = a.UpdateProgramData(i, prog)
+		if err != nil {
+			return
+		}
+		err = a.UpdateProgramRunning(i, prog)
+		if err != nil {
+			return
+		}
 	}
 	//logger.Debug("updated programs", "bytes", string(bytes))
 	return
 }
 
 func NewMQTTUpdater(sections []Section, programs []Program) *MQTTUpdater {
-	onSectionUpdate, onProgramUpdate, stop := make(chan Section, 10), make(chan *Program, 10), make(chan int)
+	onSectionUpdate, onProgramUpdate, stop := make(chan SecUpdate, 10), make(chan ProgUpdate, 10), make(chan int)
 	for i, _ := range sections {
 		sections[i].SetOnUpdate(onSectionUpdate)
 	}
@@ -322,12 +361,12 @@ func NewMQTTUpdater(sections []Section, programs []Program) *MQTTUpdater {
 	}
 }
 
-func (u *MQTTUpdater) UpdateSections() error {
-	return u.api.UpdateSections(u.sections)
+func (u *MQTTUpdater) UpdateSections() {
+	u.api.UpdateSections(u.sections)
 }
 
-func (u *MQTTUpdater) UpdatePrograms() error {
-	return u.api.UpdatePrograms(u.programs)
+func (u *MQTTUpdater) UpdatePrograms() {
+	u.api.UpdatePrograms(u.programs)
 }
 
 func (u *MQTTUpdater) run() {
@@ -337,19 +376,55 @@ func (u *MQTTUpdater) run() {
 		select {
 		case <-u.stop:
 			return
-		case <-u.onSectionUpdate:
+		case secUpdate := <-u.onSectionUpdate:
 			//logger.Debug("sec update")
 			ExhaustChan(u.onSectionUpdate)
-			err := u.UpdateSections()
+
+			index := -1
+			for i, s := range u.sections {
+				if s == secUpdate.Sec {
+					index = i
+				}
+			}
+			if index == -1 {
+				u.logger.Panicf("invalid section update recieved: %v", secUpdate.Sec)
+			}
+
+			var err error
+			switch secUpdate.Type {
+			case SEC_UPDATE_DATA:
+				err = u.api.UpdateSectionData(index, secUpdate.Sec)
+			case SEC_UPDATE_STATE:
+				err = u.api.UpdateSectionState(index, secUpdate.Sec)
+			default:
+			}
 			if err != nil {
 				u.logger.WithError(err).Error("error updating sections")
 			}
-		case <-u.onProgramUpdate:
+		case progUpdate := <-u.onProgramUpdate:
 			//logger.Debug("prog update")
 			ExhaustChan(u.onProgramUpdate)
-			err := u.UpdatePrograms()
+
+			index := -1
+			for i, _ := range u.programs {
+				if &u.programs[i] == progUpdate.Prog {
+					index = i
+				}
+			}
+			if index == -1 {
+				u.logger.Panicf("invalid program update recieved: %v", progUpdate.Prog)
+			}
+
+			var err error
+			switch progUpdate.Type {
+			case PROG_UPDATE_DATA:
+				err = u.api.UpdateProgramData(index, progUpdate.Prog)
+			case PROG_UPDATE_RUNNING:
+				err = u.api.UpdateProgramRunning(index, progUpdate.Prog)
+			default:
+			}
 			if err != nil {
-				u.logger.WithError(err).Error("error updating programs")
+				u.logger.WithError(err).Error("error updating sections")
 			}
 		}
 	}

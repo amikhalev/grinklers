@@ -87,6 +87,18 @@ func (seqj ProgSequenceJSON) ToSequence(sections []Section) (seq ProgSequence, e
 	return
 }
 
+type ProgUpdateType int
+
+const (
+	PROG_UPDATE_DATA ProgUpdateType = iota
+	PROG_UPDATE_RUNNING
+)
+
+type ProgUpdate struct {
+	Prog *Program
+	Type ProgUpdateType
+}
+
 type Program struct {
 	Name     string
 	Sequence ProgSequence
@@ -95,7 +107,7 @@ type Program struct {
 	mutex    *sync.Mutex
 	running  AtomicBool
 	runner   chan ProgRunnerMsg
-	OnUpdate chan<- *Program
+	OnUpdate chan<- ProgUpdate
 	log      *logrus.Entry
 }
 
@@ -114,12 +126,11 @@ type ProgramJSON struct {
 	Sequence *ProgSequenceJSON `json:"sequence"`
 	Sched    *Schedule         `json:"sched"`
 	Enabled  *bool             `json:"enabled"`
-	Running  *bool             `json:"running,omitempty"`
 }
 
 func NewProgramJSON(name string, sequence ProgSequenceJSON, sched *Schedule, enabled bool) ProgramJSON {
 	return ProgramJSON{
-		&name, &sequence, sched, &enabled, nil,
+		&name, &sequence, sched, &enabled,
 	}
 }
 
@@ -155,8 +166,7 @@ func (prog *Program) ToJSON(sections []Section) (data ProgramJSON, err error) {
 	if err != nil {
 		return
 	}
-	running := prog.Running()
-	data = ProgramJSON{&prog.Name, &sequence, &prog.Sched, &prog.Enabled, &running}
+	data = ProgramJSON{&prog.Name, &sequence, &prog.Sched, &prog.Enabled}
 	return
 }
 
@@ -168,10 +178,12 @@ func (prog *Program) unlock() {
 	prog.mutex.Unlock()
 }
 
-func (prog *Program) onUpdate() {
+func (prog *Program) onUpdate(t ProgUpdateType) {
 	if prog.OnUpdate != nil {
 		//prog.Debug("prog.onUpdate()")
-		prog.OnUpdate <- prog
+		prog.OnUpdate <- ProgUpdate{
+			Prog: prog, Type: t,
+		}
 	} else {
 		prog.log.Warnf("OnUpdate is nil! :%v", prog.OnUpdate)
 	}
@@ -183,10 +195,10 @@ func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
 		return
 	}
 	prog.log.Info("running program")
-	prog.onUpdate()
+	prog.onUpdate(PROG_UPDATE_RUNNING)
 	stop := func() {
 		prog.running.Store(false)
-		prog.onUpdate()
+		prog.onUpdate(PROG_UPDATE_RUNNING)
 	}
 	prog.lock()
 	seq := prog.Sequence
@@ -251,9 +263,7 @@ func (prog *Program) start(secRunner *SectionRunner, wait *sync.WaitGroup) {
 				prog.log.Debug("quitting runner")
 				return
 			case PR_CANCEL:
-				if prog.Running() {
-					cancelRun <- 0
-				}
+				cancel()
 			case PR_REFRESH:
 				continue
 			case PR_RUN:
@@ -312,7 +322,7 @@ func (prog *Program) Update(data ProgramJSON, sections []Section) (err error) {
 	}
 	prog.unlock()
 	prog.refresh()
-	prog.onUpdate()
+	prog.onUpdate(PROG_UPDATE_DATA)
 	return
 }
 

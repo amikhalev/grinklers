@@ -29,7 +29,7 @@ func (m *MockSection) State() bool {
 	return m.state
 }
 
-func (m *MockSection) SetOnUpdate(onUpdate chan<- Section) {
+func (m *MockSection) SetOnUpdate(onUpdate chan<- SecUpdate) {
 	m.Called(onUpdate)
 }
 

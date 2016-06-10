@@ -82,6 +82,7 @@ func main() {
 	defer api.Stop()
 
 	updater.Start(api)
+	updater.UpdateSections()
 	updater.UpdatePrograms()
 	defer updater.Stop()
 
