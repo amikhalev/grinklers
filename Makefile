@@ -3,7 +3,10 @@ $(info using variables from .env file)
 include ./.env
 endif
 
-BINARY     = ./grinklers
+SERVER_PACKAGE    = ./server
+SERVER_BINARY     = ./grinklers
+CLIENT_PACKAGE    = ./client
+CLIENT_BINARY     = ./grinklers_client
 
 GO := go
 
@@ -15,6 +18,7 @@ GO_TESTS         := $(shell find . -type f -name '*_test.go')
 STATIC_FILES = config.example.json
 
 TEST_TIMEOUT = 10s
+TEST_FLAGS  :=-timeout $(TEST_TIMEOUT)
 COV_OUTPUT  := coverage.out
 COV_OUTPUTS := $(addsuffix /$(COV_OUTPUT),$(GO_PACKAGE_PATHS))
 COV_ALL     := ./coverage.all.out
@@ -37,20 +41,26 @@ clean:
 	$(GO) clean
 	rm -rf $(CLEAN_FILES)
 
-$(BINARY): $(GO_SOURCES)
-	$(GO) build -o ${BINARY} ./main
+$(SERVER_BINARY): $(GO_SOURCES)
+	$(GO) build -o $(SERVER_BINARY) $(SERVER_PACKAGE)
+
+$(CLIENT_BINARY): $(GO_SOURCES)
+	$(GO) build -o $(CLIENT_BINARY) $(CLIENT_PACKAGE)
 
 deps: $(GO_SOURCES)
 	$(GO) get -t $(GO_PACKAGES)
 
-run: $(BINARY)
-	$(BINARY)
+run: $(SERVER_BINARY)
+	$(SERVER_BINARY)
+
+client: $(CLIENT_BINARY)
+	$(CLIENT_BINARY)
 
 test: $(GO_SOURCES) $(GO_TESTS)
-	$(GO) test -timeout $(TEST_TIMEOUT) $(GO_PACKAGES)
+	$(GO) test $(TEST_FLAGS) $(GO_PACKAGES)
 
 $(COV_OUTPUTS): %: $(GO_SOURCES) $(GO_TESTS)
-	$(GO) test ./$(@D) -timeout $(TEST_TIMEOUT) -coverprofile=$@
+	$(GO) test ./$(@D) $(TEST_FLAGS) -coverprofile=$@
 	@if [ ! -f $@ ]; then touch $@; fi
 
 $(COV_ALL): $(COV_OUTPUTS)
