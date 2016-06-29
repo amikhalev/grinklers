@@ -66,7 +66,7 @@ $(COV_OUTPUTS): %: $(GO_SOURCES) $(GO_TESTS)
 $(COV_ALL): $(COV_OUTPUTS)
 	@echo "generating $@"
 	@echo "mode: set" > $@
-	@for out in $^ ; do cat $$out | grep -v "mode: set" >> $@; done
+	@for out in $^ ; do cat $$out | grep -v "mode: set" >> $@; done || true
 
 $(COV_HTML): $(COV_ALL)
 	@echo "generating $@"
