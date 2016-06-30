@@ -31,7 +31,7 @@ DEPLOY_FILES  = $(addprefix $(DEPLOY_DIR)/,$(STATIC_FILES))
 DEPLOY_HOST  ?= alex@192.168.1.30
 DEPLOY_PATH  ?= /home/alex/grinklers
 
-CLEAN_FILES = $(BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
+CLEAN_FILES = $(SERVER_BINARY) $(CLIENT_BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
 
 .PHONY: all clean deps run test cover deploy
 
@@ -79,7 +79,7 @@ $(DEPLOY_DIR):
 	mkdir -p $(DEPLOY_DIR)
 
 $(DEPLOY_BINARY): $(GO_SOURCES) $(DEPLOY_DIR)
-	$(DEPLOY_ENV) $(GO) build -o $(DEPLOY_BINARY) ./main
+	$(DEPLOY_ENV) $(GO) build -o $(DEPLOY_BINARY) $(SERVER_PACKAGE)
 
 $(DEPLOY_FILES): $(DEPLOY_DIR)/%: ./%
 	cp $< $@
