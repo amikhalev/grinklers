@@ -12,6 +12,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	g "github.com/amikhalev/grinklers"
 	"github.com/joho/godotenv"
+	"path/filepath"
 )
 
 type ConfigDataJson struct {
@@ -22,7 +23,10 @@ type ConfigDataJson struct {
 func loadConfig() (sections []g.Section, programs []g.Program, err error) {
 	var configData ConfigDataJson
 
-	file, err := ioutil.ReadFile("./config.json")
+	dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	configFile := dir + "/config.json";
+
+	file, err := ioutil.ReadFile(configFile)
 	if err != nil {
 		err = fmt.Errorf("could not read config file: %v", err)
 		return
