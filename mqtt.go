@@ -119,20 +119,20 @@ func (a *MQTTApi) subscribeHandler(p string, handler apiHandlerFunc) {
 	a.client.Subscribe(path, 2, func(client mqtt.Client, message mqtt.Message) {
 		var (
 			data struct {
-				Rid *int `json:"rid"`
+				Rid int `json:"rid"`
 			}
 			rData respData = make(respData)
 			err   error
 		)
+
+		rData["reqTopic"] = message.Topic();
 
 		defer func() {
 			if pan := recover(); pan != nil {
 				a.logger.WithField("panic", pan).Warn("panic in api responder")
 				err = fmt.Errorf("internal server panic: %v", pan)
 			}
-			if data.Rid != nil {
-				rData["rid"] = *data.Rid
-			}
+			topic := fmt.Sprintf("%s/responses/%d", a.prefix, data.Rid);
 			if err != nil {
 				a.logger.WithError(err).Info("error processing request")
 				rData["error"] = err.Error()
@@ -141,7 +141,7 @@ func (a *MQTTApi) subscribeHandler(p string, handler apiHandlerFunc) {
 				}
 			}
 			resBytes, _ := json.Marshal(&rData)
-			client.Publish(a.prefix + "/response", 1, false, resBytes)
+			client.Publish(topic, 1, false, resBytes)
 		}()
 
 		err = json.Unmarshal(message.Payload(), &data)
