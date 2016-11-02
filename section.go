@@ -17,7 +17,7 @@ const (
 )
 
 type SecUpdate struct {
-	Sec Section
+	Sec  Section
 	Type SecUpdateType
 }
 
@@ -78,8 +78,8 @@ func NewRpioSection(name string, pin rpio.Pin) RpioSection {
 }
 
 type rpioSectionJson struct {
-	Name  string   `json:"name"`
-	Pin   rpio.Pin `json:"pin"`
+	Name string   `json:"name"`
+	Pin  rpio.Pin `json:"pin"`
 }
 
 func (sec *RpioSection) UnmarshalJSON(b []byte) (err error) {

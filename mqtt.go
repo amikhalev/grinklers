@@ -125,14 +125,14 @@ func (a *MQTTApi) subscribeHandler(p string, handler apiHandlerFunc) {
 			err   error
 		)
 
-		rData["reqTopic"] = message.Topic();
+		rData["reqTopic"] = message.Topic()
 
 		defer func() {
 			if pan := recover(); pan != nil {
 				a.logger.WithField("panic", pan).Warn("panic in api responder")
 				err = fmt.Errorf("internal server panic: %v", pan)
 			}
-			topic := fmt.Sprintf("%s/responses/%d", a.prefix, data.Rid);
+			topic := fmt.Sprintf("%s/responses/%d", a.prefix, data.Rid)
 			if err != nil {
 				a.logger.WithError(err).Info("error processing request")
 				rData["error"] = err.Error()
