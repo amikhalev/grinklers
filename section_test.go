@@ -79,7 +79,7 @@ func TestRpioSection_Update(t *testing.T) {
 	select {
 	case s := <-onUpdate:
 		ass.Equal(&sec, s.Sec)
-		ass.Equal(SEC_UPDATE_STATE, s.Type)
+		ass.Equal(supdateState, s.Type)
 	default:
 		ass.Fail("no update received")
 	}
@@ -90,7 +90,7 @@ func TestRpioSection_Update(t *testing.T) {
 	select {
 	case s := <-onUpdate:
 		ass.Equal(&sec, s.Sec)
-		ass.Equal(SEC_UPDATE_STATE, s.Type)
+		ass.Equal(supdateState, s.Type)
 	default:
 		ass.Fail("no update received")
 	}

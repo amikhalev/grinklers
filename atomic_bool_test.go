@@ -29,8 +29,8 @@ func TestAtomicBool(t *testing.T) {
 
 func TestAtomicBool_Concurrent(t *testing.T) {
 	var (
-		counter int = 0
-		ab          = NewAtomicBool(false)
+		counter int
+		ab      = NewAtomicBool(false)
 	)
 	routine := func() {
 		if ab.StoreIf(false, true) {

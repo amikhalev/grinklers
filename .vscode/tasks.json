@@ -1,0 +1,21 @@
+{
+    "version": "0.1.0",
+    "command": "make",
+    "isShellCommand": true,
+    "args": [],
+    "showOutput": "always",
+    "echoCommand": true,
+    "tasks": [
+        {
+            "taskName": "build",
+            "args": ["grinklers"],
+            "isBuildCommand": true,
+            "problemMatcher": ["$go"]
+        },
+        {
+            "taskName": "run",
+            "args": ["run"],
+            "problemMatcher": ["$go"]
+        }
+    ]
+}

@@ -24,7 +24,7 @@ func loadConfig() (sections []g.Section, programs []g.Program, err error) {
 	var configData ConfigDataJson
 
 	dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
-	configFile := dir + "/config.json";
+	configFile := dir + "/config.json"
 
 	file, err := ioutil.ReadFile(configFile)
 	if err != nil {
@@ -71,10 +71,10 @@ func main() {
 	updater := g.NewMQTTUpdater(sections, programs)
 
 	log.Debug("initializing sections and programs")
-	for i, _ := range sections {
+	for i := range sections {
 		sections[i].SetState(false)
 	}
-	for i, _ := range programs {
+	for i := range programs {
 		programs[i].Start(secRunner, &waitGroup)
 	}
 	log.WithFields(log.Fields{
@@ -93,10 +93,10 @@ func main() {
 	<-sigc
 
 	log.Info("cleaning up...")
-	for i, _ := range programs {
+	for i := range programs {
 		programs[i].Quit()
 	}
-	for i, _ := range sections {
+	for i := range sections {
 		sections[i].SetState(false)
 	}
 }

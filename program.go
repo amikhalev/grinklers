@@ -6,19 +6,22 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	. "github.com/amikhalev/grinklers/sched"
+	"github.com/amikhalev/grinklers/sched"
 )
 
+// ProgItem is one item in a Program sequence
 type ProgItem struct {
 	Sec      Section
 	Duration time.Duration
 }
 
+// ProgItemJSON is the JSON representation of a ProgItem
 type ProgItemJSON struct {
 	Section  int    `json:"section"`
 	Duration string `json:"duration"`
 }
 
+// ToProgItem converts a ProgItemJSON to a ProgItem
 func (data *ProgItemJSON) ToProgItem(sections []Section) (pi *ProgItem, err error) {
 	var dur time.Duration
 	dur, err = time.ParseDuration(data.Duration)
@@ -34,37 +37,42 @@ func (data *ProgItemJSON) ToProgItem(sections []Section) (pi *ProgItem, err erro
 	return
 }
 
+// ToJSON converts a ProgItem to a ProgItemJSON
 func (pi *ProgItem) ToJSON(sections []Section) (data *ProgItemJSON, err error) {
-	secId := -1
+	secID := -1
 	for i, sec := range sections {
 		if pi.Sec == sec {
-			secId = i
+			secID = i
 		}
 	}
-	if secId == -1 {
+	if secID == -1 {
 		err = fmt.Errorf("the section of this program does not exist in the sections array")
 	}
-	data = &ProgItemJSON{secId, pi.Duration.String()}
+	data = &ProgItemJSON{secID, pi.Duration.String()}
 	return
 }
 
+// ProgRunnerMsg represents a message sent to a ProgRunner to tell it what to do
 type ProgRunnerMsg int
 
 const (
-	PR_QUIT ProgRunnerMsg = iota
-	PR_CANCEL
-	PR_REFRESH
-	PR_RUN
+	prQuit ProgRunnerMsg = iota
+	prCancel
+	prRefresh
+	prRun
 )
 
+// ProgSequence is a sequence of ProgItems
 type ProgSequence []ProgItem
 
+// ProgSequenceJSON is a sequence of ProgItemJSONs
 type ProgSequenceJSON []ProgItemJSON
 
+// ToJSON converts a ProgSequence to a ProgSequenceJSON
 func (seq ProgSequence) ToJSON(sections []Section) (seqj ProgSequenceJSON, err error) {
 	seqj = make(ProgSequenceJSON, len(seq))
 	var pi *ProgItemJSON
-	for i, _ := range seq {
+	for i := range seq {
 		pi, err = seq[i].ToJSON(sections)
 		if err != nil {
 			return
@@ -74,10 +82,11 @@ func (seq ProgSequence) ToJSON(sections []Section) (seqj ProgSequenceJSON, err e
 	return
 }
 
+// ToSequence converts a ProgSequenceJSON to a ProgSequence
 func (seqj ProgSequenceJSON) ToSequence(sections []Section) (seq ProgSequence, err error) {
 	seq = make(ProgSequence, len(seqj))
 	var pi *ProgItem
-	for i, _ := range seqj {
+	for i := range seqj {
 		pi, err = seqj[i].ToProgItem(sections)
 		if err != nil {
 			return
@@ -87,22 +96,26 @@ func (seqj ProgSequenceJSON) ToSequence(sections []Section) (seq ProgSequence, e
 	return
 }
 
+// ProgUpdateType represents the types of program updates that can happen
 type ProgUpdateType int
 
 const (
-	PROG_UPDATE_DATA ProgUpdateType = iota
-	PROG_UPDATE_RUNNING
+	pupdateData ProgUpdateType = iota
+	pupdateRunning
 )
 
+// ProgUpdate represents an update that needs to be reflected about a Program
 type ProgUpdate struct {
 	Prog *Program
 	Type ProgUpdateType
 }
 
+// Program represents a sprinklers program, which runs on a schedule and contains
+// a sequence of sections to run.
 type Program struct {
 	Name     string
 	Sequence ProgSequence
-	Sched    Schedule
+	Sched    sched.Schedule
 	Enabled  bool
 	mutex    *sync.Mutex
 	running  AtomicBool
@@ -111,7 +124,8 @@ type Program struct {
 	log      *logrus.Entry
 }
 
-func NewProgram(name string, sequence []ProgItem, schedule Schedule, enabled bool) *Program {
+// NewProgram creates a new Program with the specified data
+func NewProgram(name string, sequence []ProgItem, schedule sched.Schedule, enabled bool) *Program {
 	runner := make(chan ProgRunnerMsg)
 	prog := &Program{
 		name, sequence, schedule, enabled,
@@ -121,23 +135,26 @@ func NewProgram(name string, sequence []ProgItem, schedule Schedule, enabled boo
 	return prog
 }
 
+// ProgramJSON is the JSON representation of a Program
 type ProgramJSON struct {
 	Name     *string           `json:"name"`
 	Sequence *ProgSequenceJSON `json:"sequence"`
-	Sched    *Schedule         `json:"sched"`
+	Sched    *sched.Schedule   `json:"sched"`
 	Enabled  *bool             `json:"enabled"`
 }
 
-func NewProgramJSON(name string, sequence ProgSequenceJSON, sched *Schedule, enabled bool) ProgramJSON {
+// NewProgramJSON creates a new ProgramJSON with the specified data
+func NewProgramJSON(name string, sequence ProgSequenceJSON, sched *sched.Schedule, enabled bool) ProgramJSON {
 	return ProgramJSON{
 		&name, &sequence, sched, &enabled,
 	}
 }
 
+// ToProgram converts a ProgramJSON to a Program
 func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
 	var (
 		sequence []ProgItem
-		schedule = Schedule{}
+		schedule = sched.Schedule{}
 		enabled  = false
 	)
 	if err = CheckNotNil(p.Name, "name"); err != nil {
@@ -145,11 +162,10 @@ func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
 	}
 	if err = CheckNotNil(p.Sequence, "sequence"); err != nil {
 		return
-	} else {
-		sequence, err = p.Sequence.ToSequence(sections)
-		if err != nil {
-			return
-		}
+	}
+	sequence, err = p.Sequence.ToSequence(sections)
+	if err != nil {
+		return
 	}
 	if p.Sched != nil {
 		schedule = *p.Sched
@@ -161,6 +177,7 @@ func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
 	return
 }
 
+// ToJSON converts a Program to a ProgramJSON
 func (prog *Program) ToJSON(sections []Section) (data ProgramJSON, err error) {
 	sequence, err := prog.Sequence.ToJSON(sections)
 	if err != nil {
@@ -195,10 +212,10 @@ func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
 		return
 	}
 	prog.log.Info("running program")
-	prog.onUpdate(PROG_UPDATE_RUNNING)
+	prog.onUpdate(pupdateRunning)
 	stop := func() {
 		prog.running.Store(false)
-		prog.onUpdate(PROG_UPDATE_RUNNING)
+		prog.onUpdate(pupdateRunning)
 	}
 	prog.lock()
 	seq := prog.Sequence
@@ -253,20 +270,20 @@ func (prog *Program) start(secRunner *SectionRunner, wait *sync.WaitGroup) {
 			delay = nil
 			prog.log.WithFields(logrus.Fields{"enabled": prog.Enabled}).Debug("program not scheduled")
 		}
-		prog.log.WithField("delay", delay).Debug("runner waiting for command")
+		// prog.log.WithField("delay", delay).Debug("runner waiting for command")
 		select {
 		case msg = <-prog.runner:
-			prog.log.WithField("cmd", msg).Debug("runner cmd")
+			// prog.log.WithField("cmd", msg).Debug("runner cmd")
 			switch msg {
-			case PR_QUIT:
+			case prQuit:
 				cancel()
 				prog.log.Debug("quitting runner")
 				return
-			case PR_CANCEL:
+			case prCancel:
 				cancel()
-			case PR_REFRESH:
+			case prRefresh:
 				continue
-			case PR_RUN:
+			case prRun:
 				run()
 			}
 		case <-delay:
@@ -275,6 +292,8 @@ func (prog *Program) start(secRunner *SectionRunner, wait *sync.WaitGroup) {
 	}
 }
 
+// Start starts the background goroutine which runs the program at the appropriate
+// schedule
 func (prog *Program) Start(secRunner *SectionRunner, wait *sync.WaitGroup) {
 	if wait != nil {
 		wait.Add(1)
@@ -282,26 +301,32 @@ func (prog *Program) Start(secRunner *SectionRunner, wait *sync.WaitGroup) {
 	go prog.start(secRunner, wait)
 }
 
+// Run runs the Program immediately
 func (prog *Program) Run() {
-	prog.runner <- PR_RUN
+	prog.runner <- prRun
 }
 
+// Cancel cancels running the Program
 func (prog *Program) Cancel() {
-	prog.runner <- PR_CANCEL
+	prog.runner <- prCancel
 }
 
 func (prog *Program) refresh() {
-	prog.runner <- PR_REFRESH
+	prog.runner <- prRefresh
 }
 
+// Quit tells the background goroutine for this Program to stop
 func (prog *Program) Quit() {
-	prog.runner <- PR_QUIT
+	prog.runner <- prQuit
 }
 
+// Running checks if the goroutine is currently running
 func (prog *Program) Running() bool {
 	return prog.running.Load()
 }
 
+// Update updates the data for this program based on the specified ProgramJSON, notifying
+// the runner of any changes.
 func (prog *Program) Update(data ProgramJSON, sections []Section) (err error) {
 	prog.lock()
 	if data.Name != nil {
@@ -322,16 +347,18 @@ func (prog *Program) Update(data ProgramJSON, sections []Section) (err error) {
 	}
 	prog.unlock()
 	prog.refresh()
-	prog.onUpdate(PROG_UPDATE_DATA)
+	prog.onUpdate(pupdateData)
 	return
 }
 
+// ProgramsJSON represents multiple ProgramJSONs in a JSON array
 type ProgramsJSON []ProgramJSON
 
+// ToPrograms converts this ProgramsJSON to Programs
 func (progs ProgramsJSON) ToPrograms(sections []Section) (programs []Program, err error) {
 	programs = make([]Program, len(progs))
 	var p *Program
-	for i, _ := range progs {
+	for i := range progs {
 		p, err = progs[i].ToProgram(sections)
 		if err != nil {
 			return
@@ -341,9 +368,10 @@ func (progs ProgramsJSON) ToPrograms(sections []Section) (programs []Program, er
 	return
 }
 
+// ProgramsToJSON converts programs to ProgramsJSON
 func ProgramsToJSON(programs []Program, sections []Section) (data ProgramsJSON, err error) {
 	data = make(ProgramsJSON, len(programs))
-	for i, _ := range programs {
+	for i := range programs {
 		data[i], err = programs[i].ToJSON(sections)
 		if err != nil {
 			return

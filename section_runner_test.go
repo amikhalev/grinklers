@@ -41,14 +41,14 @@ var _ Section = (*MockSection)(nil)
 
 func TestSectionRun_String(t *testing.T) {
 	sec := newMockSection("sec")
-	sr := SectionRun{sec, 1 * time.Second, nil}
+	sr := sectionRun{sec, 1 * time.Second, nil}
 	assert.Equal(t, "{'sec' for 1s}", sr.String())
 }
 
 type SRQueueSuite struct {
 	suite.Suite
 	a     *assert.Assertions
-	queue SRQueue
+	queue srQueue
 	sec1  *MockSection
 	sec2  *MockSection
 	sec3  *MockSection
@@ -69,9 +69,9 @@ func (s *SRQueueSuite) TestPushPop() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := &SectionRun{s.sec1, 5 * time.Second, nil}
-	item2 := &SectionRun{s.sec2, 10 * time.Second, nil}
-	item3 := &SectionRun{s.sec3, 15 * time.Second, nil}
+	item1 := &sectionRun{s.sec1, 5 * time.Second, nil}
+	item2 := &sectionRun{s.sec2, 10 * time.Second, nil}
+	item3 := &sectionRun{s.sec3, 15 * time.Second, nil}
 
 	ass.Nil(queue.Pop(), "Pop() should be nil when empty")
 	ass.Equal(0, queue.Len(), "Len() should be 0 when empty")
@@ -93,9 +93,9 @@ func (s *SRQueueSuite) TestOverflow() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := &SectionRun{s.sec1, 5 * time.Second, nil}
-	item2 := &SectionRun{s.sec2, 10 * time.Second, nil}
-	item3 := &SectionRun{s.sec3, 15 * time.Second, nil}
+	item1 := &sectionRun{s.sec1, 5 * time.Second, nil}
+	item2 := &sectionRun{s.sec2, 10 * time.Second, nil}
+	item3 := &sectionRun{s.sec3, 15 * time.Second, nil}
 
 	queue.Push(item1)
 	ass.Equal(1, queue.Len(), "Len() does not match")
@@ -116,8 +116,8 @@ func (s *SRQueueSuite) TestNilPop() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := &SectionRun{s.sec1, 5 * time.Second, nil}
-	item2 := &SectionRun{s.sec2, 10 * time.Second, nil}
+	item1 := &sectionRun{s.sec1, 5 * time.Second, nil}
+	item2 := &sectionRun{s.sec2, 10 * time.Second, nil}
 
 	queue.Push(item1)
 	queue.Push(nil)
@@ -132,9 +132,9 @@ func (s *SRQueueSuite) TestRemove() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := &SectionRun{s.sec1, 5 * time.Second, nil}
-	item2 := &SectionRun{s.sec2, 10 * time.Second, nil}
-	item3 := &SectionRun{s.sec3, 15 * time.Second, nil}
+	item1 := &sectionRun{s.sec1, 5 * time.Second, nil}
+	item2 := &sectionRun{s.sec2, 10 * time.Second, nil}
+	item3 := &sectionRun{s.sec3, 15 * time.Second, nil}
 
 	queue.Push(item1)
 	queue.Push(item2)

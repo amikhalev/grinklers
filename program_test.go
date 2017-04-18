@@ -21,7 +21,7 @@ func makeSchedule() Schedule {
 	runTime := time.Now().Add(10 * time.Millisecond)
 	return Schedule{
 		Times: []TimeOfDay{
-			TimeOfDay{runTime.Hour(), runTime.Minute(), runTime.Second(), runTime.Nanosecond() / 1000000},
+			TimeOfDay{Hour: runTime.Hour(), Minute: runTime.Minute(), Second: runTime.Second(), Millisecond: runTime.Nanosecond() / 1000000},
 		},
 		Weekdays: EveryDay,
 	}
@@ -92,48 +92,48 @@ func TestProgram_JSON(t *testing.T) {
 	  	},
 	   	"enabled": true
 	   }`
-	var progJson ProgramJSON
-	err := json.Unmarshal([]byte(str), &progJson)
+	var progJSON ProgramJSON
+	err := json.Unmarshal([]byte(str), &progJSON)
 	req.NoError(err)
-	prog, err := progJson.ToProgram(sections)
+	prog, err := progJSON.ToProgram(sections)
 	req.NoError(err)
 	ass.Equal("test 1234", prog.Name)
 	ass.Equal(true, prog.Enabled)
 	ass.Equal(ProgItem{sections[0], 1*time.Hour + 2*time.Minute + 3*time.Second}, prog.Sequence[0])
 	ass.Equal(ProgItem{sections[1], 24 * time.Millisecond}, prog.Sequence[1])
-	ass.Equal(TimeOfDay{1, 2, 0, 0}, prog.Sched.Times[0])
+	ass.Equal(TimeOfDay{Hour: 1, Minute: 2, Second: 0, Millisecond: 0}, prog.Sched.Times[0])
 	ass.Contains(prog.Sched.Weekdays, time.Monday)
 	ass.Contains(prog.Sched.Weekdays, time.Wednesday)
 	ass.Contains(prog.Sched.Weekdays, time.Friday)
 
-	progJson.Enabled = nil
-	_, err = progJson.ToProgram(sections)
+	progJSON.Enabled = nil
+	_, err = progJSON.ToProgram(sections)
 	ass.NoError(err)
 
-	progJson.Sched = nil
-	_, err = progJson.ToProgram(sections)
+	progJSON.Sched = nil
+	_, err = progJSON.ToProgram(sections)
 	ass.NoError(err)
 
-	*(progJson.Sequence) = ProgSequenceJSON{ProgItemJSON{3, ""}}
-	_, err = progJson.ToProgram(sections)
+	*(progJSON.Sequence) = ProgSequenceJSON{ProgItemJSON{3, ""}}
+	_, err = progJSON.ToProgram(sections)
 	ass.Error(err)
 
-	progJson.Sequence = nil
-	_, err = progJson.ToProgram(sections)
+	progJSON.Sequence = nil
+	_, err = progJSON.ToProgram(sections)
 	ass.Error(err)
 
-	progJson.Name = nil
-	_, err = progJson.ToProgram(sections)
+	progJSON.Name = nil
+	_, err = progJSON.ToProgram(sections)
 	ass.Error(err)
 
-	progJson, err = prog.ToJSON(sections)
+	progJSON, err = prog.ToJSON(sections)
 	req.NoError(err)
 
 	prog.Sequence[0].Sec = &RpioSection{}
 	_, err = prog.ToJSON(sections)
 	ass.Error(err)
 
-	_, err = json.Marshal(&progJson)
+	_, err = json.Marshal(&progJSON)
 	req.NoError(err)
 }
 
@@ -266,12 +266,12 @@ func (s *ProgramSuite) TestProgram_Run() {
 
 	p := <-onUpdate
 	ass.Equal(prog, p.Prog)
-	ass.Equal(PROG_UPDATE_RUNNING, p.Type)
+	ass.Equal(pupdateRunning, p.Type)
 	ass.Equal(true, prog.Running())
 
 	p = <-onUpdate
 	ass.Equal(prog, p.Prog)
-	ass.Equal(PROG_UPDATE_RUNNING, p.Type)
+	ass.Equal(pupdateRunning, p.Type)
 	ass.Equal(false, prog.Running())
 
 	s.sec1.AssertExpectations(s.T())

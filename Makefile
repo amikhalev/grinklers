@@ -33,7 +33,7 @@ DEPLOY_PATH  ?= /home/alex/grinklers
 
 CLEAN_FILES = $(SERVER_BINARY) $(CLIENT_BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
 
-.PHONY: all clean deps run test cover deploy
+.PHONY: all clean deps run client test cover deploy
 
 all: run
 

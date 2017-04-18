@@ -9,18 +9,20 @@ import (
 	"github.com/stianeikeland/go-rpio"
 )
 
-type SecUpdateType int
+type secUpdateType int
 
 const (
-	SEC_UPDATE_DATA SecUpdateType = iota
-	SEC_UPDATE_STATE
+	supdateData secUpdateType = iota
+	supdateState
 )
 
+// SecUpdate is an update made to a Section
 type SecUpdate struct {
 	Sec  Section
-	Type SecUpdateType
+	Type secUpdateType
 }
 
+// Section is an interface for sprinklers sections which can be turned on and off
 type Section interface {
 	SetState(on bool)
 	State() (on bool)
@@ -29,13 +31,14 @@ type Section interface {
 }
 
 var (
-	RPI           bool
+	rpi           bool
 	sectionValues []bool
 )
 
+// InitSection initializes section functionality and must be called before sections are used
 func InitSection() (err error) {
-	RPI = (os.Getenv("RPI") == "true")
-	if RPI {
+	rpi = (os.Getenv("RPI") == "true")
+	if rpi {
 		Logger.Info("opening rpio")
 		err = rpio.Open()
 		if err != nil {
@@ -48,8 +51,9 @@ func InitSection() (err error) {
 	return
 }
 
+// CleanupSection uninitialized section functionality and should be called sometime after InitSection
 func CleanupSection() (err error) {
-	if RPI {
+	if rpi {
 		err = rpio.Close()
 		if err != nil {
 			return
@@ -60,6 +64,8 @@ func CleanupSection() (err error) {
 	return
 }
 
+// RpioSection is a section which uses raspberry pi io pins to control sections,
+// unless rpi is set to false
 type RpioSection struct {
 	name     string
 	pin      rpio.Pin
@@ -69,6 +75,7 @@ type RpioSection struct {
 
 var _ Section = (*RpioSection)(nil)
 
+// NewRpioSection creates a new RpioSection with the specified data
 func NewRpioSection(name string, pin rpio.Pin) RpioSection {
 	return RpioSection{
 		name, pin,
@@ -77,31 +84,34 @@ func NewRpioSection(name string, pin rpio.Pin) RpioSection {
 	}
 }
 
-type rpioSectionJson struct {
+type rpioSectionJSON struct {
 	Name string   `json:"name"`
 	Pin  rpio.Pin `json:"pin"`
 }
 
+// UnmarshalJSON converts JSON to a RpioSection
 func (sec *RpioSection) UnmarshalJSON(b []byte) (err error) {
-	var d rpioSectionJson
+	var d rpioSectionJSON
 	if err = json.Unmarshal(b, &d); err == nil {
 		*sec = NewRpioSection(d.Name, d.Pin)
 	}
 	return
 }
 
+// MarshalJSON converts a RpioSection to JSON
 func (sec *RpioSection) MarshalJSON() ([]byte, error) {
-	d := rpioSectionJson{
+	d := rpioSectionJSON{
 		sec.name, sec.pin,
 	}
 	return json.Marshal(&d)
 }
 
+// SetOnUpdate sets the update handler chan for this Section
 func (sec *RpioSection) SetOnUpdate(onUpdate chan<- SecUpdate) {
 	sec.onUpdate = onUpdate
 }
 
-func (sec *RpioSection) update(t SecUpdateType) {
+func (sec *RpioSection) update(t secUpdateType) {
 	if sec.onUpdate != nil {
 		sec.onUpdate <- SecUpdate{
 			Sec: sec, Type: t,
@@ -109,8 +119,9 @@ func (sec *RpioSection) update(t SecUpdateType) {
 	}
 }
 
+// SetState sets the running state of this RpioSection
 func (sec *RpioSection) SetState(on bool) {
-	if RPI {
+	if rpi {
 		sec.log.WithField("state", on).Debug("setting section state")
 		if on {
 			sec.pin.Output()
@@ -123,23 +134,26 @@ func (sec *RpioSection) SetState(on bool) {
 		sec.log.WithField("state", on).Debug("[stub] setting section state")
 		sectionValues[sec.pin-2] = on
 	}
-	sec.update(SEC_UPDATE_STATE)
+	sec.update(supdateState)
 }
 
+// State gets the current running state of this Section
 func (sec *RpioSection) State() bool {
-	if RPI {
-		return sec.pin.Read() == rpio.High
-	} else {
+	if !rpi {
 		return sectionValues[sec.pin-2]
 	}
+	return sec.pin.Read() == rpio.High
 }
 
+// Name gets the name of this RpioSection
 func (sec *RpioSection) Name() string {
 	return sec.name
 }
 
+// RpioSections represents a list of Sections that are all RpioSections
 type RpioSections []Section
 
+// UnmarshalJSON converts JSON to RpioSections
 func (secs *RpioSections) UnmarshalJSON(b []byte) (err error) {
 	var s []RpioSection
 	err = json.Unmarshal(b, &s)
@@ -147,7 +161,7 @@ func (secs *RpioSections) UnmarshalJSON(b []byte) (err error) {
 		return
 	}
 	*secs = make(RpioSections, len(s))
-	for i, _ := range s {
+	for i := range s {
 		(*secs)[i] = &s[i]
 	}
 	return

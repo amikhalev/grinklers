@@ -18,6 +18,7 @@ type respData map[string]interface{}
 
 type apiHandlerFunc func(client mqtt.Client, message mqtt.Message, rData respData) (err error)
 
+// MQTTApi encapsulates all functionality exposed over MQTT
 type MQTTApi struct {
 	sections  []Section
 	programs  []Program
@@ -27,6 +28,7 @@ type MQTTApi struct {
 	logger    *logrus.Entry
 }
 
+// NewMQTTApi creates a new MQTTApi that uses the specified data
 func NewMQTTApi(sections []Section, programs []Program, secRunner *SectionRunner) *MQTTApi {
 	return &MQTTApi{
 		sections, programs, secRunner,
@@ -49,6 +51,7 @@ func (a *MQTTApi) createMQTTOpts(brokerURI *url.URL, cid string) (opts *mqtt.Cli
 	return
 }
 
+// Start connects to the MQTT broker and listens to the API topics
 func (a *MQTTApi) Start() (err error) {
 	broker := os.Getenv("MQTT_BROKER")
 	if broker == "" {
@@ -90,16 +93,19 @@ func (a *MQTTApi) Start() (err error) {
 	return
 }
 
+// Stop disconnects from the broker
 func (a *MQTTApi) Stop() {
 	a.logger.Info("disconnecting from mqtt broker")
 	a.updateConnected(false)
 	a.client.Disconnect(250)
 }
 
+// Client gets the MQTT client used by the MQTTApi
 func (a *MQTTApi) Client() mqtt.Client {
 	return a.client
 }
 
+// Prefix gets the topic prefix of this MQTTApi
 func (a *MQTTApi) Prefix() string {
 	return a.prefix
 }
@@ -121,7 +127,7 @@ func (a *MQTTApi) subscribeHandler(p string, handler apiHandlerFunc) {
 			data struct {
 				Rid int `json:"rid"`
 			}
-			rData respData = make(respData)
+			rData = make(respData)
 			err   error
 		)
 
@@ -174,15 +180,15 @@ func (a *MQTTApi) parseProgramPath(path string) (program *Program, err error) {
 		return
 	}
 	progStr := parts[2]
-	progId, err := strconv.Atoi(progStr)
+	progID, err := strconv.Atoi(progStr)
 	if err != nil {
 		return
 	}
-	err = CheckRange(&progId, a.prefix+"/programs/id", len(a.programs))
+	err = CheckRange(&progID, a.prefix+"/programs/id", len(a.programs))
 	if err != nil {
 		return
 	}
-	program = &a.programs[progId]
+	program = &a.programs[progID]
 	return
 }
 
@@ -193,15 +199,15 @@ func (a *MQTTApi) parseSectionPath(path string) (section Section, err error) {
 		return
 	}
 	secStr := parts[2]
-	secId, err := strconv.Atoi(secStr)
+	secID, err := strconv.Atoi(secStr)
 	if err != nil {
 		return
 	}
-	err = CheckRange(&secId, a.prefix+"/sections/id", len(a.sections))
+	err = CheckRange(&secID, a.prefix+"/sections/id", len(a.sections))
 	if err != nil {
 		return
 	}
-	section = a.sections[secId]
+	section = a.sections[secID]
 	return
 }
 
@@ -262,6 +268,7 @@ func (a *MQTTApi) subscribe() {
 	})
 }
 
+// MQTTUpdater updates MQTT topics with the current state of the application
 type MQTTUpdater struct {
 	sections        []Section
 	programs        []Program
@@ -272,6 +279,7 @@ type MQTTUpdater struct {
 	logger          *logrus.Entry
 }
 
+// UpdateSectionData updates the topic for the specified section
 func (a *MQTTApi) UpdateSectionData(index int, sec Section) (err error) {
 	bytes, err := json.Marshal(sec)
 	if err != nil {
@@ -282,12 +290,14 @@ func (a *MQTTApi) UpdateSectionData(index int, sec Section) (err error) {
 	return
 }
 
+// UpdateSectionState updates the topic for the current state of the section
 func (a *MQTTApi) UpdateSectionState(index int, sec Section) (err error) {
 	bytes := []byte(strconv.FormatBool(sec.State()))
 	a.client.Publish(fmt.Sprintf("%s/sections/%d/state", a.prefix, index), 1, true, bytes)
 	return
 }
 
+// UpdateSections updates the topics for all the specified sections
 func (a *MQTTApi) UpdateSections(sections []Section) (err error) {
 	lenSections := len(sections)
 	bytes := []byte(strconv.Itoa(lenSections))
@@ -306,6 +316,7 @@ func (a *MQTTApi) UpdateSections(sections []Section) (err error) {
 	return
 }
 
+// UpdateProgramData updates the topic for the data about the specified Program
 func (a *MQTTApi) UpdateProgramData(index int, prog *Program) (err error) {
 	data, err := prog.ToJSON(a.sections)
 	if err != nil {
@@ -321,17 +332,19 @@ func (a *MQTTApi) UpdateProgramData(index int, prog *Program) (err error) {
 	return
 }
 
+// UpdateProgramRunning updates the topic for the current running state of the Program
 func (a *MQTTApi) UpdateProgramRunning(index int, prog *Program) (err error) {
 	bytes := []byte(strconv.FormatBool(prog.Running()))
 	a.client.Publish(fmt.Sprintf("%s/programs/%d/running", a.prefix, index), 1, true, bytes)
 	return
 }
 
+// UpdatePrograms updates the topics for all the specified Programs
 func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
 	lenPrograms := len(programs)
 	bytes := []byte(strconv.Itoa(lenPrograms))
 	a.client.Publish(a.prefix+"/programs", 1, true, bytes)
-	for i, _ := range programs {
+	for i := range programs {
 		prog := &programs[i]
 		err = a.UpdateProgramData(i, prog)
 		if err != nil {
@@ -346,12 +359,13 @@ func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
 	return
 }
 
+// NewMQTTUpdater creates a new MQTTUpdater which uses the specified state
 func NewMQTTUpdater(sections []Section, programs []Program) *MQTTUpdater {
 	onSectionUpdate, onProgramUpdate, stop := make(chan SecUpdate, 10), make(chan ProgUpdate, 10), make(chan int)
-	for i, _ := range sections {
+	for i := range sections {
 		sections[i].SetOnUpdate(onSectionUpdate)
 	}
-	for i, _ := range programs {
+	for i := range programs {
 		programs[i].OnUpdate = onProgramUpdate
 	}
 	return &MQTTUpdater{
@@ -361,10 +375,12 @@ func NewMQTTUpdater(sections []Section, programs []Program) *MQTTUpdater {
 	}
 }
 
+// UpdateSections updates the topics for all sections
 func (u *MQTTUpdater) UpdateSections() {
 	u.api.UpdateSections(u.sections)
 }
 
+// UpdatePrograms updates topics for all programs
 func (u *MQTTUpdater) UpdatePrograms() {
 	u.api.UpdatePrograms(u.programs)
 }
@@ -392,9 +408,9 @@ func (u *MQTTUpdater) run() {
 
 			var err error
 			switch secUpdate.Type {
-			case SEC_UPDATE_DATA:
+			case supdateData:
 				err = u.api.UpdateSectionData(index, secUpdate.Sec)
-			case SEC_UPDATE_STATE:
+			case supdateState:
 				err = u.api.UpdateSectionState(index, secUpdate.Sec)
 			default:
 			}
@@ -406,7 +422,7 @@ func (u *MQTTUpdater) run() {
 			ExhaustChan(u.onProgramUpdate)
 
 			index := -1
-			for i, _ := range u.programs {
+			for i := range u.programs {
 				if &u.programs[i] == progUpdate.Prog {
 					index = i
 				}
@@ -417,9 +433,9 @@ func (u *MQTTUpdater) run() {
 
 			var err error
 			switch progUpdate.Type {
-			case PROG_UPDATE_DATA:
+			case pupdateData:
 				err = u.api.UpdateProgramData(index, progUpdate.Prog)
-			case PROG_UPDATE_RUNNING:
+			case pupdateRunning:
 				err = u.api.UpdateProgramRunning(index, progUpdate.Prog)
 			default:
 			}
@@ -430,11 +446,13 @@ func (u *MQTTUpdater) run() {
 	}
 }
 
+// Start starts the MQTTUpdater to listen and update topics
 func (u *MQTTUpdater) Start(api *MQTTApi) {
 	u.api = api
 	go u.run()
 }
 
+// Stop stops the updater from updating topics
 func (u *MQTTUpdater) Stop() {
 	u.stop <- 0
 }
