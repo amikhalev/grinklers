@@ -16,6 +16,11 @@
             "taskName": "run",
             "args": ["run"],
             "problemMatcher": ["$go"]
+        },
+        {
+            "taskName": "test",
+            "isTestCommand": true,
+            "problemMatcher": ["$go"]
         }
     ]
 }

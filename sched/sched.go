@@ -48,15 +48,18 @@ func (d *Date) ToTime() time.Time {
 	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.Local)
 }
 
-func (d *Date) WithResolvedYear() Date {
+func (d *Date) WithResolvedYearNow() Date {
+	return d.WithResolvedYear(time.Now())
+}
+
+func (d *Date) WithResolvedYear(refTime time.Time) Date {
 	if d.Year == 0 {
-		return Date{time.Now().Year(), d.Month, d.Day}
+		return Date{refTime.Year(), d.Month, d.Day}
 	}
 	return *d
 }
 
-func (date1 *Date) After(date2 *Date) bool {
-	d1, d2 := date1.WithResolvedYear(), date2.WithResolvedYear()
+func (d1 *Date) After(d2 *Date) bool {
 	if d1.Year > d2.Year {
 		return true
 	} else if d1.Year == d2.Year {
@@ -118,15 +121,22 @@ func (sched *Schedule) NextRunAfterTime(timeReference time.Time) *time.Time {
 	)
 	if sched.To != nil {
 		to = &Date{}
-		*to = sched.To.WithResolvedYear()
+		*to = sched.To.WithResolvedYear(timeReference)
 	}
 	if sched.From != nil {
 		from = &Date{}
-		*from = sched.From.WithResolvedYear()
+		*from = sched.From.WithResolvedYear(timeReference)
 		if to != nil && from.After(to) {
-			to.Year += 1
+			refDate := DateFromTime(timeReference)
+			if (refDate.Before(to) && refDate.Before(from)) ||
+				(refDate.After(to) && refDate.After(from)) {
+				from.Year--
+			} else {
+				to.Year++
+			}
 		}
 		if from.ToTime().After(timeReference) {
+			log.Printf("timeRef: %v, from: %v, to: %v", timeReference, from, to)
 			timeReference = from.ToTime()
 		}
 	}

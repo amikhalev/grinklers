@@ -29,17 +29,18 @@ func TestTimeOfDay(t *testing.T) {
 func TestDate(t *testing.T) {
 	ass := assert.New(t)
 	date := Date{2016, 6, 1}
+	refTime := time.Date(2016, 5, 20, 9, 0, 0, 0, time.Local)
 
 	ass.Equal(date, DateFromTime(date.ToTime()))
-	ass.Equal(date, date.WithResolvedYear())
+	ass.Equal(date, date.WithResolvedYear(refTime))
 
 	date2 := Date{0, 6, 1}
 	year := time.Now().Year()
-	ass.Equal(Date{year, 6, 1}, date2.WithResolvedYear())
+	ass.Equal(Date{year, 6, 1}, date2.WithResolvedYearNow())
 
 	date3 := Date{2016, 6, 2}
 	ass.Equal(false, date3.After(&date3))
-	ass.Equal(false, date3.Before(&date3))
+	ass.Equal(false, date3.Before(&date))
 	ass.Equal(false, date.After(&date3))
 	ass.Equal(true, date.Before(&date3))
 	ass.Equal(true, date3.After(&date))

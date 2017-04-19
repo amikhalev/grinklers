@@ -9,10 +9,11 @@ import (
 
 	"sync"
 
+	"path/filepath"
+
 	log "github.com/Sirupsen/logrus"
 	g "github.com/amikhalev/grinklers"
 	"github.com/joho/godotenv"
-	"path/filepath"
 )
 
 type ConfigDataJson struct {
@@ -23,8 +24,11 @@ type ConfigDataJson struct {
 func loadConfig() (sections []g.Section, programs []g.Program, err error) {
 	var configData ConfigDataJson
 
-	dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
-	configFile := dir + "/config.json"
+	configFile := os.Getenv("CONFIG")
+	if configFile == "" {
+		dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+		configFile = dir + "/config.json"
+	}
 
 	file, err := ioutil.ReadFile(configFile)
 	if err != nil {
