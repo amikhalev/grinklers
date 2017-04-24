@@ -15,6 +15,7 @@ type ConfigData struct {
 	Programs []Program
 }
 
+// ToJSON converts a ConfigData to a ConfigDataJSON
 func (c *ConfigData) ToJSON() (j ConfigDataJSON, err error) {
 	j = ConfigDataJSON{}
 	j.Sections = c.Sections
@@ -22,11 +23,13 @@ func (c *ConfigData) ToJSON() (j ConfigDataJSON, err error) {
 	return
 }
 
+// ConfigDataJSON is the JSON form of config data
 type ConfigDataJSON struct {
-	Sections RpioSections
-	Programs ProgramsJSON
+	Sections RpioSections `json:"sections"`
+	Programs ProgramsJSON `json:"programs"`
 }
 
+// ToConfigData converts a ConfigDataJSON to a ConfigData
 func (j *ConfigDataJSON) ToConfigData() (c ConfigData, err error) {
 	c = ConfigData{}
 	c.Sections = j.Sections
@@ -50,6 +53,7 @@ var log = Logger.WithField("module", "config")
 var configFile = findConfigFile()
 var configMutex = &sync.Mutex{}
 
+// LoadConfig loads a ConfigData from the config file
 func LoadConfig() (config ConfigData, err error) {
 	configMutex.Lock()
 	defer configMutex.Unlock()
@@ -72,6 +76,7 @@ func LoadConfig() (config ConfigData, err error) {
 	return
 }
 
+// WriteConfig writes a ConfigData to the config file
 func WriteConfig(configData *ConfigData) (err error) {
 	configMutex.Lock()
 	defer configMutex.Unlock()
