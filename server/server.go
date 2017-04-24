@@ -1,53 +1,14 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
-
 	"sync"
-
-	"path/filepath"
 
 	log "github.com/Sirupsen/logrus"
 	g "github.com/amikhalev/grinklers"
 	"github.com/joho/godotenv"
 )
-
-type ConfigDataJson struct {
-	Sections g.RpioSections
-	Programs g.ProgramsJSON
-}
-
-func loadConfig() (sections []g.Section, programs []g.Program, err error) {
-	var configData ConfigDataJson
-
-	configFile := os.Getenv("CONFIG")
-	if configFile == "" {
-		dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
-		configFile = dir + "/config.json"
-	}
-
-	file, err := ioutil.ReadFile(configFile)
-	if err != nil {
-		err = fmt.Errorf("could not read config file: %v", err)
-		return
-	}
-	err = json.Unmarshal(file, &configData)
-	if err != nil {
-		err = fmt.Errorf("could not parse config file: %v", err)
-		return
-	}
-
-	sections = configData.Sections
-	programs, err = configData.Programs.ToPrograms(sections)
-	if err != nil {
-		err = fmt.Errorf("invalid programs json: %v", err)
-	}
-	return
-}
 
 func main() {
 	// channel which is notified on an interrupt signal
@@ -62,17 +23,23 @@ func main() {
 	}
 	defer g.CleanupSection()
 
-	sections, programs, err := loadConfig()
+	config, err := g.LoadConfig()
 	if err != nil {
 		log.WithError(err).Fatalf("error loading config")
 	}
+
+	log.Info("writing back config")
+	g.WriteConfig(&config)
 
 	waitGroup := sync.WaitGroup{}
 
 	secRunner := g.NewSectionRunner()
 	secRunner.Start(&waitGroup)
 
-	updater := g.NewMQTTUpdater(sections, programs)
+	sections := config.Sections
+	programs := config.Programs
+
+	updater := g.NewMQTTUpdater(&config)
 
 	log.Debug("initializing sections and programs")
 	for i := range sections {
@@ -85,7 +52,7 @@ func main() {
 		"lenSections": len(sections), "lenPrograms": len(programs),
 	}).Info("initialized sections and programs")
 
-	api := g.NewMQTTApi(sections, programs, secRunner)
+	api := g.NewMQTTApi(&config, secRunner)
 	api.Start()
 	defer api.Stop()
 

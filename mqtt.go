@@ -20,8 +20,7 @@ type apiHandlerFunc func(client mqtt.Client, message mqtt.Message, rData respDat
 
 // MQTTApi encapsulates all functionality exposed over MQTT
 type MQTTApi struct {
-	sections  []Section
-	programs  []Program
+	config    *ConfigData
 	secRunner *SectionRunner
 	client    mqtt.Client
 	prefix    string
@@ -29,9 +28,9 @@ type MQTTApi struct {
 }
 
 // NewMQTTApi creates a new MQTTApi that uses the specified data
-func NewMQTTApi(sections []Section, programs []Program, secRunner *SectionRunner) *MQTTApi {
+func NewMQTTApi(config *ConfigData, secRunner *SectionRunner) *MQTTApi {
 	return &MQTTApi{
-		sections, programs, secRunner,
+		config, secRunner,
 		nil, "",
 		Logger.WithField("module", "MQTTApi"),
 	}
@@ -119,10 +118,10 @@ func (a *MQTTApi) updateConnected(connected bool) (err error) {
 	return
 }
 
-func (a *MQTTApi) subscribeHandler(p string, handler apiHandlerFunc) {
-	path := a.prefix + p
-	a.logger.WithField("path", path).Debug("registering handler")
-	a.client.Subscribe(path, 2, func(client mqtt.Client, message mqtt.Message) {
+func (a *MQTTApi) subscribeHandler(path string, handler apiHandlerFunc) {
+	p := a.prefix + path
+	a.logger.WithField("path", p).Debug("registering handler")
+	a.client.Subscribe(p, 2, func(client mqtt.Client, message mqtt.Message) {
 		var (
 			data struct {
 				Rid int `json:"rid"`
@@ -184,11 +183,11 @@ func (a *MQTTApi) parseProgramPath(path string) (program *Program, err error) {
 	if err != nil {
 		return
 	}
-	err = CheckRange(&progID, a.prefix+"/programs/id", len(a.programs))
+	err = CheckRange(&progID, a.prefix+"/programs/id", len(a.config.Programs))
 	if err != nil {
 		return
 	}
-	program = &a.programs[progID]
+	program = &a.config.Programs[progID]
 	return
 }
 
@@ -203,11 +202,11 @@ func (a *MQTTApi) parseSectionPath(path string) (section Section, err error) {
 	if err != nil {
 		return
 	}
-	err = CheckRange(&secID, a.prefix+"/sections/id", len(a.sections))
+	err = CheckRange(&secID, a.prefix+"/sections/id", len(a.config.Sections))
 	if err != nil {
 		return
 	}
-	section = a.sections[secID]
+	section = a.config.Sections[secID]
 	return
 }
 
@@ -229,6 +228,30 @@ func (a *MQTTApi) subscribe() {
 		}
 		program.Cancel()
 		rData["message"] = fmt.Sprintf("cancelled program '%s'", program.Name)
+		return
+	})
+
+	a.subscribeHandler("/programs/+/update", func(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
+		program, err := a.parseProgramPath(message.Topic())
+		if err != nil {
+			return
+		}
+		var data ProgramJSON
+		err = json.Unmarshal(message.Payload(), &data)
+		if err != nil {
+			err = fmt.Errorf("could not parse program update: %v", err)
+			return
+		}
+		err = program.Update(data, a.config.Sections)
+		if err != nil {
+			err = fmt.Errorf("could not process program update: %v", err)
+		}
+		programJSON, err := program.ToJSON(a.config.Sections)
+		if err != nil {
+			return
+		}
+		rData["message"] = fmt.Sprintf("updated program '%s'", program.Name)
+		rData["data"] = programJSON
 		return
 	})
 
@@ -270,8 +293,7 @@ func (a *MQTTApi) subscribe() {
 
 // MQTTUpdater updates MQTT topics with the current state of the application
 type MQTTUpdater struct {
-	sections        []Section
-	programs        []Program
+	config          *ConfigData
 	onSectionUpdate chan SecUpdate
 	onProgramUpdate chan ProgUpdate
 	stop            chan int
@@ -318,7 +340,7 @@ func (a *MQTTApi) UpdateSections(sections []Section) (err error) {
 
 // UpdateProgramData updates the topic for the data about the specified Program
 func (a *MQTTApi) UpdateProgramData(index int, prog *Program) (err error) {
-	data, err := prog.ToJSON(a.sections)
+	data, err := prog.ToJSON(a.config.Sections)
 	if err != nil {
 		err = fmt.Errorf("error converting programs to json: %v", err)
 		return
@@ -360,16 +382,16 @@ func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
 }
 
 // NewMQTTUpdater creates a new MQTTUpdater which uses the specified state
-func NewMQTTUpdater(sections []Section, programs []Program) *MQTTUpdater {
+func NewMQTTUpdater(config *ConfigData) *MQTTUpdater {
 	onSectionUpdate, onProgramUpdate, stop := make(chan SecUpdate, 10), make(chan ProgUpdate, 10), make(chan int)
-	for i := range sections {
-		sections[i].SetOnUpdate(onSectionUpdate)
+	for i := range config.Sections {
+		config.Sections[i].SetOnUpdate(onSectionUpdate)
 	}
-	for i := range programs {
-		programs[i].OnUpdate = onProgramUpdate
+	for i := range config.Programs {
+		config.Programs[i].OnUpdate = onProgramUpdate
 	}
 	return &MQTTUpdater{
-		sections, programs,
+		config,
 		onSectionUpdate, onProgramUpdate, stop, nil,
 		Logger.WithField("module", "MQTTUpdater"),
 	}
@@ -377,12 +399,12 @@ func NewMQTTUpdater(sections []Section, programs []Program) *MQTTUpdater {
 
 // UpdateSections updates the topics for all sections
 func (u *MQTTUpdater) UpdateSections() {
-	u.api.UpdateSections(u.sections)
+	u.api.UpdateSections(u.config.Sections)
 }
 
 // UpdatePrograms updates topics for all programs
 func (u *MQTTUpdater) UpdatePrograms() {
-	u.api.UpdatePrograms(u.programs)
+	u.api.UpdatePrograms(u.config.Programs)
 }
 
 func (u *MQTTUpdater) run() {
@@ -397,7 +419,7 @@ func (u *MQTTUpdater) run() {
 			ExhaustChan(u.onSectionUpdate)
 
 			index := -1
-			for i, s := range u.sections {
+			for i, s := range u.config.Sections {
 				if s == secUpdate.Sec {
 					index = i
 				}
@@ -410,6 +432,9 @@ func (u *MQTTUpdater) run() {
 			switch secUpdate.Type {
 			case supdateData:
 				err = u.api.UpdateSectionData(index, secUpdate.Sec)
+				if err == nil {
+					err = WriteConfig(u.config)
+				}
 			case supdateState:
 				err = u.api.UpdateSectionState(index, secUpdate.Sec)
 			default:
@@ -422,8 +447,8 @@ func (u *MQTTUpdater) run() {
 			ExhaustChan(u.onProgramUpdate)
 
 			index := -1
-			for i := range u.programs {
-				if &u.programs[i] == progUpdate.Prog {
+			for i := range u.config.Programs {
+				if &u.config.Programs[i] == progUpdate.Prog {
 					index = i
 				}
 			}
@@ -435,6 +460,9 @@ func (u *MQTTUpdater) run() {
 			switch progUpdate.Type {
 			case pupdateData:
 				err = u.api.UpdateProgramData(index, progUpdate.Prog)
+				if err == nil {
+					err = WriteConfig(u.config)
+				}
 			case pupdateRunning:
 				err = u.api.UpdateProgramRunning(index, progUpdate.Prog)
 			default:

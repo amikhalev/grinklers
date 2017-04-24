@@ -8,13 +8,14 @@
     "tasks": [
         {
             "taskName": "build",
+            "suppressTaskName": true,
             "args": ["grinklers"],
             "isBuildCommand": true,
             "problemMatcher": ["$go"]
         },
         {
             "taskName": "run",
-            "args": ["run"],
+            "isShellCommand": true,
             "problemMatcher": ["$go"]
         },
         {
