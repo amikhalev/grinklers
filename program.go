@@ -17,18 +17,14 @@ type ProgItem struct {
 
 // ProgItemJSON is the JSON representation of a ProgItem
 type ProgItemJSON struct {
-	Section  int    `json:"section"`
-	Duration string `json:"duration"`
+	Section int `json:"section"`
+	// Duration of the program item in seconds
+	Duration float64 `json:"duration"`
 }
 
 // ToProgItem converts a ProgItemJSON to a ProgItem
 func (data *ProgItemJSON) ToProgItem(sections []Section) (pi *ProgItem, err error) {
-	var dur time.Duration
-	dur, err = time.ParseDuration(data.Duration)
-	if err != nil {
-		err = fmt.Errorf("error parsing ProgItem duration: %v", err)
-		return
-	}
+	dur := time.Duration(data.Duration) * time.Second
 	if err = CheckRange(&data.Section, "section id", len(sections)); err != nil {
 		err = fmt.Errorf("invalid program item section id: %v", err)
 		return
@@ -48,7 +44,7 @@ func (pi *ProgItem) ToJSON(sections []Section) (data *ProgItemJSON, err error) {
 	if secID == -1 {
 		err = fmt.Errorf("the section of this program does not exist in the sections array")
 	}
-	data = &ProgItemJSON{secID, pi.Duration.String()}
+	data = &ProgItemJSON{secID, pi.Duration.Seconds()}
 	return
 }
 

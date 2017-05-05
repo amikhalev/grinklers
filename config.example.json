@@ -1,42 +1,136 @@
 {
   "sections": [
-    { "name": "Front Yard Middle", "pin": 23 },
-    { "name": "Front Yard Left", "pin": 17 },
-    { "name": "Front Yard Right", "pin": 21 },
-    { "name": "Back Yard Middle", "pin": 22 },
-    { "name": "Back Yard Sauna", "pin": 25 },
-    { "name": "Garden", "pin": 24 }
+    {
+      "name": "Front Yard Middle",
+      "pin": 23
+    },
+    {
+      "name": "Front Yard Left",
+      "pin": 17
+    },
+    {
+      "name": "Front Yard Right",
+      "pin": 21
+    },
+    {
+      "name": "Back Yard Middle",
+      "pin": 22
+    },
+    {
+      "name": "Back Yard Sauna",
+      "pin": 25
+    },
+    {
+      "name": "Garden",
+      "pin": 24
+    }
   ],
   "programs": [
     {
       "name": "Main",
       "sequence": [
-        { "section": 0, "duration": "7m" },
-        { "section": 1, "duration": "5m" },
-        { "section": 2, "duration": "3m" },
-        { "section": 3, "duration": "3m" },
-        { "section": 4, "duration": "3m" },
-        { "section": 5, "duration": "10m" }
+        {
+          "section": 0,
+          "duration": 420.0
+        },
+        {
+          "section": 1,
+          "duration": 300.0
+        },
+        {
+          "section": 2,
+          "duration": 180.0
+        },
+        {
+          "section": 3,
+          "duration": 180.0
+        },
+        {
+          "section": 4,
+          "duration": 180.0
+        },
+        {
+          "section": 5,
+          "duration": 600.0
+        }
       ],
       "sched": {
-        "times": [{"hour": 7, "minute": 10}, {"hour": 21, "minute": 0, "second": 0}],
-        "weekdays": [0, 1, 2, 3, 4, 5, 6]
+        "times": [
+          {
+            "hour": 7,
+            "minute": 10,
+            "second": 0,
+            "millisecond": 0
+          },
+          {
+            "hour": 21,
+            "minute": 0,
+            "second": 0,
+            "millisecond": 0
+          }
+        ],
+        "weekdays": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "from": null,
+        "to": null
       },
       "enabled": true
     },
     {
       "name": "test",
       "sequence": [
-        { "section": 0, "duration": ".5s" },
-        { "section": 1, "duration": ".5s" },
-        { "section": 2, "duration": ".5s" },
-        { "section": 3, "duration": ".5s" },
-        { "section": 4, "duration": ".5s" },
-        { "section": 5, "duration": ".5s" }
+        {
+          "section": 0,
+          "duration": 0.5
+        },
+        {
+          "section": 1,
+          "duration": 0.5
+        },
+        {
+          "section": 2,
+          "duration": 0.5
+        },
+        {
+          "section": 3,
+          "duration": 0.5
+        },
+        {
+          "section": 4,
+          "duration": 0.5
+        },
+        {
+          "section": 5,
+          "duration": 0.5
+        }
       ],
       "sched": {
-        "times": [{"hour": 11, "minute": 34, "second": 20}],
-        "weekdays": [0, 1, 2, 3, 4, 5, 6]
+        "times": [
+          {
+            "hour": 11,
+            "minute": 34,
+            "second": 20,
+            "millisecond": 0
+          }
+        ],
+        "weekdays": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "from": null,
+        "to": null
       },
       "enabled": true
     }
