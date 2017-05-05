@@ -24,7 +24,7 @@ type ProgItemJSON struct {
 
 // ToProgItem converts a ProgItemJSON to a ProgItem
 func (data *ProgItemJSON) ToProgItem(sections []Section) (pi *ProgItem, err error) {
-	dur := time.Duration(data.Duration) * time.Second
+	dur := time.Duration(data.Duration * float64(time.Second))
 	if err = CheckRange(&data.Section, "section id", len(sections)); err != nil {
 		err = fmt.Errorf("invalid program item section id: %v", err)
 		return
