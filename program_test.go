@@ -36,24 +36,20 @@ func TestProgItem_JSON(t *testing.T) {
 
 	str := `{
 		"section": 1,
-		"duration": "1m"
+		"duration": 60.0
 	}`
 	var pij ProgItemJSON
 	err := json.Unmarshal([]byte(str), &pij)
 	req.NoError(err)
 	ass.Equal(1, pij.Section)
-	ass.Equal("1m", pij.Duration)
+	ass.Equal(60.0, pij.Duration)
 
 	pi, err := pij.ToProgItem(sections)
 	req.NoError(err)
 	ass.Equal(float64(1.0), pi.Duration.Minutes())
 	ass.Equal(sections[1], pi.Sec)
 
-	pij.Duration = "should not parse as a valid duration"
-	_, err = pij.ToProgItem(sections)
-	ass.Error(err)
-
-	pij.Duration = "1m"
+	pij.Duration = 60.0
 	pij.Section = 5 // out of range
 	_, err = pij.ToProgItem(sections)
 	ass.Error(err)
@@ -61,7 +57,7 @@ func TestProgItem_JSON(t *testing.T) {
 	pij2, err := pi.ToJSON(sections)
 	req.NoError(err)
 	ass.Equal(1, pij2.Section)
-	ass.Equal("1m0s", pij2.Duration)
+	ass.Equal(60.0, pij2.Duration)
 
 	pi.Sec = &RpioSection{} // not in sections array
 	_, err = pi.ToJSON(sections)
@@ -79,10 +75,10 @@ func TestProgram_JSON(t *testing.T) {
 		"name": "test 1234",
 	 	"sequence": [{
 	 		"section": 0,
-	 		"duration": "1h2m3s"
+	 		"duration": 3723.0
 	 	}, {
 	 		"section": 1,
-	 		"duration": "24ms"
+	 		"duration": 0.024
 	 	}],
 	  	"sched": {
 	  		"times": [{
@@ -114,7 +110,7 @@ func TestProgram_JSON(t *testing.T) {
 	_, err = progJSON.ToProgram(sections)
 	ass.NoError(err)
 
-	*(progJSON.Sequence) = ProgSequenceJSON{ProgItemJSON{3, ""}}
+	*(progJSON.Sequence) = ProgSequenceJSON{ProgItemJSON{10, 0}}
 	_, err = progJSON.ToProgram(sections)
 	ass.Error(err)
 
@@ -148,7 +144,7 @@ func TestPrograms_JSON(t *testing.T) {
 	{
 		"name": "p1", "sequence": []
 	}, {
-		"name": "p2", "sequence": [{"section": 0, "duration": "1m"}],
+		"name": "p2", "sequence": [{"section": 0, "duration": 60.0}],
 		"sched": {},
 		"enabled": true
 	}
@@ -166,7 +162,7 @@ func TestPrograms_JSON(t *testing.T) {
 	ass.Equal("p2", *psj[1].Name)
 	req.Len(*psj[1].Sequence, 1)
 	ass.Equal(0, (*psj[1].Sequence)[0].Section)
-	ass.Equal("1m", (*psj[1].Sequence)[0].Duration)
+	ass.Equal(60.0, (*psj[1].Sequence)[0].Duration)
 	ass.Equal(true, *psj[1].Enabled)
 
 	ps, err := psj.ToPrograms(sections)
@@ -198,7 +194,7 @@ func TestPrograms_JSON(t *testing.T) {
 	ass.Equal("p2", *psj[1].Name)
 	req.Len(*psj[1].Sequence, 1)
 	ass.Equal(0, (*psj[1].Sequence)[0].Section)
-	ass.Equal("1m0s", (*psj[1].Sequence)[0].Duration)
+	ass.Equal(60.0, (*psj[1].Sequence)[0].Duration)
 	ass.Equal(true, *psj[1].Enabled)
 
 	ps[1].Sequence[0].Sec = &RpioSection{}
@@ -386,8 +382,8 @@ func (s *ProgramSuite) TestProgram_Update() {
 	ass.Equal(false, prog.Running())
 
 	newSeq := ProgSequenceJSON{
-		ProgItemJSON{0, "25ms"},
-		ProgItemJSON{1, "25ms"},
+		ProgItemJSON{0, 0.025},
+		ProgItemJSON{1, 0.025},
 	}
 	newSched := makeSchedule()
 	err := prog.Update(NewProgramJSON("test2", newSeq, &newSched, true), []Section{s.sec1, s.sec2})
