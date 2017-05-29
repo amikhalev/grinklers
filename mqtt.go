@@ -261,18 +261,15 @@ func (a *MQTTApi) subscribe() {
 			return
 		}
 		var data struct {
-			Duration *string
+			Duration float64
 		}
 		err = json.Unmarshal(message.Payload(), &data)
 		if err != nil {
 			err = fmt.Errorf("could not parse run section request: %v", err)
 			return
 		}
-		duration, err := parseDuration(data.Duration)
-		if err != nil {
-			return
-		}
-		done := a.secRunner.RunSectionAsync(sec, *duration)
+		duration := time.Duration(data.Duration * float64(time.Second))
+		done := a.secRunner.RunSectionAsync(sec, duration)
 		go func() {
 			<-done
 		}()
