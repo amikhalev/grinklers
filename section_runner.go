@@ -202,7 +202,9 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 }
 
 func (r *SectionRunner) stateUpdate() {
-	r.OnUpdateState <- &r.State
+	if r.OnUpdateState != nil {
+		r.OnUpdateState <- &r.State
+	}
 }
 
 func (r *SectionRunner) startUpdate() {
