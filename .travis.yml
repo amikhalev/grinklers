@@ -2,6 +2,7 @@ language: go
 sude: false
 go:
   - 1.6
+  - 1.8
   - tip
 before_install:
   - go get github.com/mattn/goveralls
