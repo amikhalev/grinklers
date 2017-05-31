@@ -25,15 +25,15 @@ func (sr *SectionRun) String() string {
 	return fmt.Sprintf("{'%s' for %v}", sr.Sec.Name(), sr.Duration)
 }
 
-// SrQueue is a queue for SectionRuns. It is implemented as a circular buffer that doubles in length when it fills up
-type SrQueue struct {
+// SRQueue is a queue for SectionRuns. It is implemented as a circular buffer that doubles in length when it fills up
+type SRQueue struct {
 	items []*SectionRun
 	head  int
 	tail  int
 }
 
 // Format implements Formatter for SrQueue
-func (q SrQueue) Format(f fmt.State, c rune) {
+func (q SRQueue) Format(f fmt.State, c rune) {
 	fmt.Fprint(f, "[")
 	for i := q.head; i != q.tail; i = (i + 1) % len(q.items) {
 		if i != q.head {
@@ -46,17 +46,17 @@ func (q SrQueue) Format(f fmt.State, c rune) {
 	fmt.Fprint(f, "]")
 }
 
-var _ fmt.Formatter = (*SrQueue)(nil)
+var _ fmt.Formatter = (*SRQueue)(nil)
 
-func newSRQueue(size int) SrQueue {
-	return SrQueue{
+func newSRQueue(size int) SRQueue {
+	return SRQueue{
 		make([]*SectionRun, size),
 		0, 0,
 	}
 }
 
 // Push adds an item to the end of the SrQueue, expanding it if necessary
-func (q *SrQueue) Push(item *SectionRun) {
+func (q *SRQueue) Push(item *SectionRun) {
 	q.items[q.tail] = item
 	itemsLen := len(q.items)
 	q.tail = (q.tail + 1) % itemsLen
@@ -72,7 +72,7 @@ func (q *SrQueue) Push(item *SectionRun) {
 }
 
 // Pop pops the first item off the SrQueue
-func (q *SrQueue) Pop() *SectionRun {
+func (q *SRQueue) Pop() *SectionRun {
 	if q.head == q.tail {
 		return nil
 	}
@@ -85,7 +85,7 @@ func (q *SrQueue) Pop() *SectionRun {
 }
 
 // Len gets the current number of items in the SrQueue
-func (q *SrQueue) Len() int {
+func (q *SRQueue) Len() int {
 	count := 0
 	for i := q.head; i != q.tail; i = (i + 1) % len(q.items) {
 		if q.items[i] != nil {
@@ -96,7 +96,7 @@ func (q *SrQueue) Len() int {
 }
 
 // RemoveMatchingSection removes all items from the queue that are runs with the specified section
-func (q *SrQueue) RemoveMatchingSection(sec Section) {
+func (q *SRQueue) RemoveMatchingSection(sec Section) {
 	checkAndRemove := func(i int) {
 		if q.items[i] != nil && q.items[i].Sec == sec {
 			q.items[i] = nil
@@ -110,7 +110,7 @@ func (q *SrQueue) RemoveMatchingSection(sec Section) {
 
 // SRState is the state of the SectionRunner. All accesses synchronized over Mu
 type SRState struct {
-	Queue   SrQueue
+	Queue   SRQueue
 	Current *SectionRun
 	Mu      sync.Mutex
 }
@@ -123,24 +123,26 @@ func newSRState() SRState {
 
 // SectionRunner runs a queue of sections
 type SectionRunner struct {
-	run    chan SectionRun
-	cancel chan Section
-	quit   chan struct{}
-	state  SRState
-	log    *logrus.Entry
+	run           chan SectionRun
+	cancel        chan Section
+	quit          chan struct{}
+	State         SRState
+	OnUpdateState chan<- *SRState
+	log           *logrus.Entry
 }
 
 // NewSectionRunner creates a new SectionRunner without starting it
 func NewSectionRunner() *SectionRunner {
 	return &SectionRunner{
 		make(chan SectionRun, 2), make(chan Section, 2), make(chan struct{}),
-		newSRState(),
+		newSRState(), nil,
 		Logger.WithField("module", "SectionRunner"),
 	}
 }
 
 func (r *SectionRunner) start(wait *sync.WaitGroup) {
-	state := &r.state
+	r.stateUpdate()
+	state := &r.State
 	var (
 		delay <-chan time.Time
 	)
@@ -170,7 +172,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			r.log.Debug("quiting section runner")
 			return
 		case item := <-r.run:
-			state.Mu.Lock()
+			r.startUpdate()
 			if state.Current == nil {
 				state.Current = &item
 				runItem()
@@ -178,9 +180,9 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 				state.Queue.Push(&item)
 				r.log.WithField("state", state).Debug("queued section run")
 			}
-			state.Mu.Unlock()
+			r.endUpdate()
 		case cancelSec := <-r.cancel:
-			state.Mu.Lock()
+			r.startUpdate()
 			state.Queue.RemoveMatchingSection(cancelSec)
 			if state.Current != nil && state.Current.Sec == cancelSec {
 				finishRun()
@@ -189,14 +191,27 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			r.log.WithFields(logrus.Fields{
 				"state": state, "sec": cancelSec.Name(),
 			}).Debug("cancelled section run")
-			state.Mu.Unlock()
+			r.endUpdate()
 		case <-delay:
-			state.Mu.Lock()
+			r.startUpdate()
 			finishRun()
 			runItem()
-			state.Mu.Unlock()
+			r.endUpdate()
 		}
 	}
+}
+
+func (r *SectionRunner) stateUpdate() {
+	r.OnUpdateState <- &r.State
+}
+
+func (r *SectionRunner) startUpdate() {
+	r.State.Mu.Lock()
+}
+
+func (r *SectionRunner) endUpdate() {
+	r.State.Mu.Unlock()
+	r.stateUpdate()
 }
 
 // Start starts the background goroutine of a SectionRunner

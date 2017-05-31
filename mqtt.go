@@ -290,12 +290,13 @@ func (a *MQTTApi) subscribe() {
 
 // MQTTUpdater updates MQTT topics with the current state of the application
 type MQTTUpdater struct {
-	config          *ConfigData
-	onSectionUpdate chan SecUpdate
-	onProgramUpdate chan ProgUpdate
-	stop            chan int
-	api             *MQTTApi
-	logger          *logrus.Entry
+	config                *ConfigData
+	onSectionUpdate       chan SecUpdate
+	onProgramUpdate       chan ProgUpdate
+	onSectionRunnerUpdate chan *SRState
+	stop                  chan int
+	api                   *MQTTApi
+	logger                *logrus.Entry
 }
 
 // UpdateSectionData updates the topic for the specified section
@@ -379,17 +380,21 @@ func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
 }
 
 // NewMQTTUpdater creates a new MQTTUpdater which uses the specified state
-func NewMQTTUpdater(config *ConfigData) *MQTTUpdater {
-	onSectionUpdate, onProgramUpdate, stop := make(chan SecUpdate, 10), make(chan ProgUpdate, 10), make(chan int)
+func NewMQTTUpdater(config *ConfigData, sectionRunner *SectionRunner) *MQTTUpdater {
+	onSectionUpdate := make(chan SecUpdate, 10)
+	onProgramUpdate := make(chan ProgUpdate, 10)
+	onSectionRunnerUpdate := make(chan *SRState, 10)
+	stop := make(chan int)
 	for i := range config.Sections {
 		config.Sections[i].SetOnUpdate(onSectionUpdate)
 	}
 	for i := range config.Programs {
 		config.Programs[i].OnUpdate = onProgramUpdate
 	}
+	sectionRunner.OnUpdateState = onSectionRunnerUpdate
 	return &MQTTUpdater{
 		config,
-		onSectionUpdate, onProgramUpdate, stop, nil,
+		onSectionUpdate, onProgramUpdate, onSectionRunnerUpdate, stop, nil,
 		Logger.WithField("module", "MQTTUpdater"),
 	}
 }
@@ -467,6 +472,9 @@ func (u *MQTTUpdater) run() {
 			if err != nil {
 				u.logger.WithError(err).Error("error updating sections")
 			}
+		case srState := <-u.onSectionRunnerUpdate:
+			u.logger.WithField("srState", srState).Debugf("section runner update")
+			ExhaustChan(u.onSectionRunnerUpdate)
 		}
 	}
 }

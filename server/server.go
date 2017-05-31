@@ -39,7 +39,7 @@ func main() {
 	sections := config.Sections
 	programs := config.Programs
 
-	updater := g.NewMQTTUpdater(&config)
+	updater := g.NewMQTTUpdater(&config, secRunner)
 
 	log.Debug("initializing sections and programs")
 	for i := range sections {

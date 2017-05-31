@@ -48,7 +48,7 @@ func TestSectionRun_String(t *testing.T) {
 type SRQueueSuite struct {
 	suite.Suite
 	a     *assert.Assertions
-	queue SrQueue
+	queue SRQueue
 	sec1  *MockSection
 	sec2  *MockSection
 	sec3  *MockSection
