@@ -269,11 +269,9 @@ func (a *MQTTApi) subscribe() {
 			return
 		}
 		duration := time.Duration(data.Duration * float64(time.Second))
-		done := a.secRunner.RunSectionAsync(sec, duration)
-		go func() {
-			<-done
-		}()
+		id := a.secRunner.QueueSectionRun(sec, duration)
 		rData["message"] = fmt.Sprintf("running section '%s' for %v", sec.Name(), duration)
+		rData["new_id"] = id
 		return
 	})
 
@@ -284,6 +282,20 @@ func (a *MQTTApi) subscribe() {
 		}
 		a.secRunner.CancelSection(sec)
 		rData["message"] = fmt.Sprintf("cancelled section '%s'", sec.Name())
+		return
+	})
+
+	a.subscribeHandler("/section_runner/cancel_id", func(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
+		var data struct {
+			ID int32
+		}
+		err = json.Unmarshal(message.Payload(), &data)
+		if err != nil {
+			err = fmt.Errorf("could not parse section_runner/cancel_id request: %v", err)
+			return
+		}
+		a.secRunner.CancelID(data.ID)
+		rData["message"] = fmt.Sprintf("cancelled section run with id %v", data.ID)
 		return
 	})
 }
@@ -376,6 +388,22 @@ func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
 		}
 	}
 	//logger.Debug("updated programs", "bytes", string(bytes))
+	return
+}
+
+// UpdateSectionRunner updates the current section_runner state with the specified SRState 
+func (a *MQTTApi) UpdateSectionRunner(state *SRState) (err error) {
+	state.Mu.Lock()
+	data, err := state.ToJSON(a.config.Sections)
+	state.Mu.Unlock()
+	if (err != nil) {
+		return
+	}
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	a.client.Publish(fmt.Sprintf("%s/section_runner", a.prefix), 1, true, bytes)
 	return
 }
 
@@ -473,8 +501,15 @@ func (u *MQTTUpdater) run() {
 				u.logger.WithError(err).Error("error updating sections")
 			}
 		case srState := <-u.onSectionRunnerUpdate:
-			u.logger.WithField("srState", srState).Debugf("section runner update")
 			ExhaustChan(u.onSectionRunnerUpdate)
+			srState.Mu.Lock()
+			u.logger.WithField("srState", *srState).Debugf("section runner update")
+			srState.Mu.Unlock()
+
+			err := u.api.UpdateSectionRunner(srState)
+			if err != nil {
+				u.logger.WithError(err).Error("error updating section runner state")
+			}
 		}
 	}
 }

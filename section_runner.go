@@ -5,12 +5,27 @@ import (
 	"time"
 
 	"sync"
+	"sync/atomic"
 
 	"github.com/Sirupsen/logrus"
 )
 
+type SectionRunJSON struct {
+	ID        int32      `json:"id"`
+	Section   int        `json:"section"`
+	Duration  float64    `json:"duration"`
+	StartTime *time.Time `json:"startTime"`
+}
+
+type SRStateJSON struct {
+	Queue   []SectionRunJSON `json:"queue"`
+	Current *SectionRunJSON  `json:"current"`
+}
+
 // SectionRun is a single run of a section for a duration that is either queued, or currently running
 type SectionRun struct {
+	// RunID is a sequential unique identifier of SectionRuns
+	RunID int32
 	// Sec is the section that should be run
 	Sec Section
 	// Duration is the duration the section is run for
@@ -25,11 +40,37 @@ func (sr *SectionRun) String() string {
 	return fmt.Sprintf("{'%s' for %v}", sr.Sec.Name(), sr.Duration)
 }
 
+func (sr *SectionRun) ToJSON(sections []Section) (j SectionRunJSON, err error) {
+	j = SectionRunJSON{}
+	secID := -1
+	for i, sec := range sections {
+		if sr.Sec == sec {
+			secID = i
+		}
+	}
+	if secID == -1 {
+		err = fmt.Errorf("the section of this program does not exist in the sections array")
+		return
+	}
+	j.ID = sr.RunID
+	j.Section = secID
+	j.Duration = sr.Duration.Seconds()
+	j.StartTime = sr.StartTime
+	return
+}
+
 // SRQueue is a queue for SectionRuns. It is implemented as a circular buffer that doubles in length when it fills up
 type SRQueue struct {
 	items []*SectionRun
 	head  int
 	tail  int
+}
+
+func newSRQueue(size int) SRQueue {
+	return SRQueue{
+		make([]*SectionRun, size),
+		0, 0,
+	}
 }
 
 // Format implements Formatter for SrQueue
@@ -48,11 +89,19 @@ func (q SRQueue) Format(f fmt.State, c rune) {
 
 var _ fmt.Formatter = (*SRQueue)(nil)
 
-func newSRQueue(size int) SRQueue {
-	return SRQueue{
-		make([]*SectionRun, size),
-		0, 0,
+func (q *SRQueue) ToJSON(sections []Section) (slice []SectionRunJSON, err error) {
+	slice = nil
+	var json SectionRunJSON
+	for i := q.head; i != q.tail; i = (i + 1) % len(q.items) {
+		if q.items[i] != nil {
+			json, err = q.items[i].ToJSON(sections)
+			if err != nil {
+				return
+			}
+			slice = append(slice, json)
+		}
 	}
+	return
 }
 
 // Push adds an item to the end of the SrQueue, expanding it if necessary
@@ -108,6 +157,18 @@ func (q *SRQueue) RemoveMatchingSection(sec Section) {
 	checkAndRemove(q.tail)
 }
 
+// RemoveById removes the SectionRun with the specified id and returns it, or returns nil if none existed
+func (q *SRQueue) RemoveById(id int32) *SectionRun {
+	for i := q.head; i != q.tail; i = (i + 1) % len(q.items) {
+		if q.items[i] != nil && q.items[i].RunID == id {
+			item := q.items[i]
+			q.items[i] = nil
+			return item
+		}
+	}
+	return nil
+}
+
 // SRState is the state of the SectionRunner. All accesses synchronized over Mu
 type SRState struct {
 	Queue   SRQueue
@@ -121,11 +182,29 @@ func newSRState() SRState {
 	}
 }
 
+func (s *SRState) ToJSON(sections []Section) (json SRStateJSON, err error) {
+	json = SRStateJSON{}
+	json.Queue, err = s.Queue.ToJSON(sections)
+	if err != nil {
+		return
+	}
+	if s.Current != nil {
+		var current SectionRunJSON
+		current, err = s.Current.ToJSON(sections)
+		json.Current = &current
+	} else {
+		json.Current = nil
+	}
+	return
+}
+
 // SectionRunner runs a queue of sections
 type SectionRunner struct {
 	run           chan SectionRun
-	cancel        chan Section
+	cancelSec     chan Section
+	cancelID      chan int32
 	quit          chan struct{}
+	nextID        int32
 	State         SRState
 	OnUpdateState chan<- *SRState
 	log           *logrus.Entry
@@ -134,8 +213,8 @@ type SectionRunner struct {
 // NewSectionRunner creates a new SectionRunner without starting it
 func NewSectionRunner() *SectionRunner {
 	return &SectionRunner{
-		make(chan SectionRun, 2), make(chan Section, 2), make(chan struct{}),
-		newSRState(), nil,
+		make(chan SectionRun, 2), make(chan Section, 2), make(chan int32, 2), make(chan struct{}),
+		0, newSRState(), nil,
 		Logger.WithField("module", "SectionRunner"),
 	}
 }
@@ -152,6 +231,8 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 		}
 		r.log.WithField("state", state).Info("running section")
 		state.Current.Sec.SetState(true)
+		startTime := time.Now()
+		state.Current.StartTime = &startTime
 		delay = time.After(state.Current.Duration)
 	}
 	finishRun := func() {
@@ -181,16 +262,27 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 				r.log.WithField("state", state).Debug("queued section run")
 			}
 			r.endUpdate()
-		case cancelSec := <-r.cancel:
+		case sec := <-r.cancelSec:
 			r.startUpdate()
-			state.Queue.RemoveMatchingSection(cancelSec)
-			if state.Current != nil && state.Current.Sec == cancelSec {
+			state.Queue.RemoveMatchingSection(sec)
+			if state.Current != nil && state.Current.Sec == sec {
 				finishRun()
 				runItem()
 			}
 			r.log.WithFields(logrus.Fields{
-				"state": state, "sec": cancelSec.Name(),
-			}).Debug("cancelled section run")
+				"state": state, "sec": sec.Name(),
+			}).Debug("cancelled section runs with section")
+			r.endUpdate()
+		case id := <-r.cancelID:
+			r.startUpdate()
+			state.Queue.RemoveById(id)
+			if state.Current != nil && state.Current.RunID == id {
+				finishRun()
+				runItem()
+			}
+			r.log.WithFields(logrus.Fields{
+				"state": state, "id": id,
+			}).Debug("cancelled section run by id")
 			r.endUpdate()
 		case <-delay:
 			r.startUpdate()
@@ -229,24 +321,38 @@ func (r *SectionRunner) Quit() {
 	r.quit <- struct{}{}
 }
 
+func (r *SectionRunner) getNextID() int32 {
+	return atomic.AddInt32(&r.nextID, 1) - 1
+}
+
 // QueueSectionRun queues the specified Section to run for dur
-func (r *SectionRunner) QueueSectionRun(sec Section, dur time.Duration) {
-	r.run <- SectionRun{sec, dur, nil, nil}
+func (r *SectionRunner) QueueSectionRun(sec Section, dur time.Duration) (id int32) {
+	id = r.getNextID()
+	r.run <- SectionRun{id, sec, dur, nil, nil}
+	return
 }
 
 // RunSectionAsync runs the section and returns a chan which recieves when the section is finished running
-func (r *SectionRunner) RunSectionAsync(sec Section, dur time.Duration) <-chan int {
-	done := make(chan int, 1)
-	r.run <- SectionRun{sec, dur, done, nil}
-	return done
+func (r *SectionRunner) RunSectionAsync(sec Section, dur time.Duration) (id int32, done <-chan int) {
+	id = r.getNextID()
+	doneChan := make(chan int, 1)
+	r.run <- SectionRun{r.getNextID(), sec, dur, doneChan, nil}
+	done = doneChan
+	return
 }
 
 // RunSection runs the section and returns when the section is finished running
 func (r *SectionRunner) RunSection(sec Section, dur time.Duration) {
-	<-r.RunSectionAsync(sec, dur)
+	_, done := r.RunSectionAsync(sec, dur)
+	<-done
 }
 
 // CancelSection cancels all runs for the specified Section
 func (r *SectionRunner) CancelSection(sec Section) {
-	r.cancel <- sec
+	r.cancelSec <- sec
+}
+
+// CancelID cancels the section run with the specified id
+func (r *SectionRunner) CancelID(id int32) {
+	r.cancelID <- id
 }

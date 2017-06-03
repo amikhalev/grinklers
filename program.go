@@ -43,6 +43,7 @@ func (pi *ProgItem) ToJSON(sections []Section) (data *ProgItemJSON, err error) {
 	}
 	if secID == -1 {
 		err = fmt.Errorf("the section of this program does not exist in the sections array")
+		return
 	}
 	data = &ProgItemJSON{secID, pi.Duration.Seconds()}
 	return
@@ -197,8 +198,6 @@ func (prog *Program) onUpdate(t ProgUpdateType) {
 		prog.OnUpdate <- ProgUpdate{
 			Prog: prog, Type: t,
 		}
-	} else {
-		prog.log.Warnf("OnUpdate is nil! :%v", prog.OnUpdate)
 	}
 }
 
@@ -217,12 +216,12 @@ func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
 	seq := prog.Sequence
 	prog.unlock()
 	for _, item := range seq {
-		secDone := secRunner.RunSectionAsync(item.Sec, item.Duration)
+		id, secDone := secRunner.RunSectionAsync(item.Sec, item.Duration)
 		select {
 		case <-secDone:
 			continue
 		case <-cancel:
-			secRunner.CancelSection(item.Sec)
+			secRunner.CancelID(id)
 			prog.log.Info("program run cancelled")
 			stop()
 			return
