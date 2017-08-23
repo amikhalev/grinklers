@@ -35,7 +35,7 @@ CLEAN_FILES = $(SERVER_BINARY) $(CLIENT_BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(C
 
 .PHONY: all clean deps run client test cover deploy
 
-all: run
+all: $(SERVER_BINARY) $(CLIENT_BINARY)
 
 clean:
 	$(GO) clean
