@@ -94,9 +94,13 @@ func (a *MQTTApi) Start() (err error) {
 
 // Stop disconnects from the broker
 func (a *MQTTApi) Stop() {
-	a.logger.Info("disconnecting from mqtt broker")
-	a.updateConnected(false)
-	a.client.Disconnect(250)
+	if a.client.IsConnected() {
+		a.logger.Info("disconnecting from mqtt broker")
+		a.updateConnected(false)
+		a.client.Disconnect(250)
+	} else {
+		a.logger.Warn("was never connected to broker")
+	}
 }
 
 // Client gets the MQTT client used by the MQTTApi
@@ -391,12 +395,12 @@ func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
 	return
 }
 
-// UpdateSectionRunner updates the current section_runner state with the specified SRState 
+// UpdateSectionRunner updates the current section_runner state with the specified SRState
 func (a *MQTTApi) UpdateSectionRunner(state *SRState) (err error) {
 	state.Mu.Lock()
 	data, err := state.ToJSON(a.config.Sections)
 	state.Mu.Unlock()
-	if (err != nil) {
+	if err != nil {
 		return
 	}
 	bytes, err := json.Marshal(data)
