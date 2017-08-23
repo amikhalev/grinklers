@@ -41,7 +41,7 @@ var _ Section = (*MockSection)(nil)
 
 func TestSectionRun_String(t *testing.T) {
 	sec := newMockSection("sec")
-	sr := SectionRun{0, sec, 1 * time.Second, nil, nil}
+	sr := NewSectionRun(0, sec, 1 * time.Second, nil)
 	assert.Equal(t, "{'sec' for 1s}", sr.String())
 }
 
@@ -69,23 +69,23 @@ func (s *SRQueueSuite) TestPushPop() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := &SectionRun{0, s.sec1, 5 * time.Second, nil, nil}
-	item2 := &SectionRun{0, s.sec2, 10 * time.Second, nil, nil}
-	item3 := &SectionRun{0, s.sec3, 15 * time.Second, nil, nil}
+	item1 := NewSectionRun(0, s.sec1, 5 * time.Second, nil)
+	item2 := NewSectionRun(0, s.sec2, 10 * time.Second, nil)
+	item3 := NewSectionRun(0, s.sec3, 15 * time.Second, nil)
 
 	ass.Nil(queue.Pop(), "Pop() should be nil when empty")
 	ass.Equal(0, queue.Len(), "Len() should be 0 when empty")
 
-	queue.Push(item1)
+	queue.Push(&item1)
 	ass.Equal(1, queue.Len(), "Len() does not match")
-	queue.Push(item2)
+	queue.Push(&item2)
 	ass.Equal(2, queue.Len(), "Len() does not match")
-	queue.Push(item3)
+	queue.Push(&item3)
 	ass.Equal(3, queue.Len(), "Len() does not match")
 
-	ass.Equal(item1, queue.Pop(), "item1 is not 1 out of queue")
-	ass.Equal(item2, queue.Pop(), "item2 is not 2 out of queue")
-	ass.Equal(item3, queue.Pop(), "item3 is not 3 out of queue")
+	ass.Equal(&item1, queue.Pop(), "item1 is not 1 out of queue")
+	ass.Equal(&item2, queue.Pop(), "item2 is not 2 out of queue")
+	ass.Equal(&item3, queue.Pop(), "item3 is not 3 out of queue")
 	ass.Equal(0, queue.Len(), "Len() does not match")
 }
 
@@ -93,21 +93,21 @@ func (s *SRQueueSuite) TestOverflow() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := &SectionRun{0, s.sec1, 5 * time.Second, nil, nil}
-	item2 := &SectionRun{0, s.sec2, 10 * time.Second, nil, nil}
-	item3 := &SectionRun{0, s.sec3, 15 * time.Second, nil, nil}
+	item1 := NewSectionRun(0, s.sec1, 5 * time.Second, nil)
+	item2 := NewSectionRun(0, s.sec2, 10 * time.Second, nil)
+	item3 := NewSectionRun(0, s.sec3, 15 * time.Second, nil)
 
-	queue.Push(item1)
+	queue.Push(&item1)
 	ass.Equal(1, queue.Len(), "Len() does not match")
-	ass.Equal(item1, queue.Pop(), "item1 is not out of queue")
+	ass.Equal(&item1, queue.Pop(), "item1 is not out of queue")
 	ass.Equal(0, queue.Len(), "Len() does not match")
-	queue.Push(item2)
+	queue.Push(&item2)
 	ass.Equal(1, queue.Len(), "Len() does not match")
-	ass.Equal(item2, queue.Pop(), "item2 is not out of queue")
+	ass.Equal(&item2, queue.Pop(), "item2 is not out of queue")
 	ass.Equal(0, queue.Len(), "Len() does not match")
-	queue.Push(item3)
+	queue.Push(&item3)
 	ass.Equal(1, queue.Len(), "Len() does not match")
-	ass.Equal(item3, queue.Pop(), "item3 is not out of queue")
+	ass.Equal(&item3, queue.Pop(), "item3 is not out of queue")
 	ass.Equal(0, queue.Len(), "Len() does not match")
 
 }
@@ -116,36 +116,36 @@ func (s *SRQueueSuite) TestNilPop() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := &SectionRun{0, s.sec1, 5 * time.Second, nil, nil}
-	item2 := &SectionRun{0, s.sec2, 10 * time.Second, nil, nil}
+	item1 := NewSectionRun(0, s.sec1, 5 * time.Second, nil)
+	item2 := NewSectionRun(0, s.sec2, 10 * time.Second, nil)
 
-	queue.Push(item1)
+	queue.Push(&item1)
 	queue.Push(nil)
 	ass.Equal(1, queue.Len(), "Len() does not match")
-	queue.Push(item2)
+	queue.Push(&item2)
 	ass.Equal(2, queue.Len(), "Len() does not match")
-	ass.Equal(item1, queue.Pop(), "item1 is not out of queue")
-	ass.Equal(item2, queue.Pop(), "item2 is not out of queue")
+	ass.Equal(&item1, queue.Pop(), "item1 is not out of queue")
+	ass.Equal(&item2, queue.Pop(), "item2 is not out of queue")
 }
 
 func (s *SRQueueSuite) TestRemove() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := &SectionRun{0, s.sec1, 5 * time.Second, nil, nil}
-	item2 := &SectionRun{0, s.sec2, 10 * time.Second, nil, nil}
-	item3 := &SectionRun{0, s.sec3, 15 * time.Second, nil, nil}
+	item1 := NewSectionRun(0, s.sec1, 5 * time.Second, nil)
+	item2 := NewSectionRun(0, s.sec2, 10 * time.Second, nil)
+	item3 := NewSectionRun(0, s.sec3, 15 * time.Second, nil)
 
-	queue.Push(item1)
-	queue.Push(item2)
-	queue.Push(item3)
+	queue.Push(&item1)
+	queue.Push(&item2)
+	queue.Push(&item3)
 	ass.Equal(3, queue.Len(), "Len() does not match")
 
 	queue.RemoveMatchingSection(s.sec2)
 	ass.Equal(2, queue.Len(), "Len() does not match")
 	queue.RemoveMatchingSection(s.sec1)
 	ass.Equal(1, queue.Len(), "Len() does not match")
-	ass.Equal(item3, queue.Pop(), "item3 is not 3 out of queue")
+	ass.Equal(&item3, queue.Pop(), "item3 is not 3 out of queue")
 	ass.Equal(0, queue.Len(), "Len() does not match")
 }
 
@@ -229,6 +229,20 @@ func (s *SectionRunnerSuite) TestCancel() {
 
 	s.sec2.AssertNotCalled(s.T(), "SetState", true)
 	s.sec2.AssertNotCalled(s.T(), "SetState", false)
+}
+
+func (s *SectionRunnerSuite) TestPause() {
+	s.sec1.On("SetState", true).Return()
+	s.sec1.On("SetState", false).Return()
+
+	s.sr.QueueSectionRun(s.sec1, time.Minute)
+	time.Sleep(10 * time.Millisecond)
+	s.sec1.AssertCalled(s.T(), "SetState", true)
+	s.sec1.Calls = nil
+	s.sr.Pause()
+	time.Sleep(10 * time.Millisecond)
+	s.ass.True(s.sr.State.Paused)
+	s.sec1.AssertCalled(s.T(), "SetState", false)
 }
 
 func TestSectionRunner(t *testing.T) {

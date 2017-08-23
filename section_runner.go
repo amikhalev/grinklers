@@ -10,16 +10,20 @@ import (
 	"github.com/Sirupsen/logrus"
 )
 
+// SectionRunJSON is the JSON representation of a SectionRun
 type SectionRunJSON struct {
 	ID        int32      `json:"id"`
 	Section   int        `json:"section"`
 	Duration  float64    `json:"duration"`
 	StartTime *time.Time `json:"startTime"`
+	PauseTime *time.Time `json:"pauseTime"`
 }
 
+// SRStateJSON is the JSON representation of a SRState
 type SRStateJSON struct {
 	Queue   []SectionRunJSON `json:"queue"`
 	Current *SectionRunJSON  `json:"current"`
+	Paused  bool             `json:"paused"`
 }
 
 // SectionRun is a single run of a section for a duration that is either queued, or currently running
@@ -34,12 +38,43 @@ type SectionRun struct {
 	Done chan<- int
 	// StartTime is the time the section started running, or nil if the section is still queued
 	StartTime *time.Time
+	// PauseTime is the time the section was paused, if the SectionRunner is currently paused. Otherwise
+	// it is nil
+	PauseTime *time.Time
+}
+
+// NewSectionRun creates a new SectionRun
+func NewSectionRun(runID int32, sec Section, duration time.Duration, doneChan chan<- int) SectionRun {
+	return SectionRun{
+		runID, sec, duration, doneChan, nil, nil,
+	}
+}
+
+// RemainingFrom returns how much time was remaining on this section run at time reference
+func (sr *SectionRun) RemainingFrom(reference time.Time) *time.Duration {
+	if sr.StartTime == nil {
+		return nil
+	}
+	dur := sr.Duration - (reference.Sub(*sr.StartTime))
+	return &dur
+}
+
+// RemainingNow returns how much longer is remaining for this section run right now, if it is running.
+// If it is paused, this will take into account when it was paused and not change as time passes
+// If it is not running, it will return nil
+func (sr *SectionRun) RemainingNow() *time.Duration {
+	if sr.PauseTime != nil {
+		return sr.RemainingFrom(*sr.PauseTime)
+	}
+	return sr.RemainingFrom(time.Now())
 }
 
 func (sr *SectionRun) String() string {
 	return fmt.Sprintf("{'%s' for %v}", sr.Sec.Name(), sr.Duration)
 }
 
+// ToJSON returns an the JSON representation of this SectionRun, or err if there was some error.
+// sections is a slice of the sections (in order to compute the section index)
 func (sr *SectionRun) ToJSON(sections []Section) (j SectionRunJSON, err error) {
 	j = SectionRunJSON{}
 	secID := -1
@@ -56,6 +91,7 @@ func (sr *SectionRun) ToJSON(sections []Section) (j SectionRunJSON, err error) {
 	j.Section = secID
 	j.Duration = sr.Duration.Seconds()
 	j.StartTime = sr.StartTime
+	j.PauseTime = sr.PauseTime
 	return
 }
 
@@ -89,6 +125,8 @@ func (q SRQueue) Format(f fmt.State, c rune) {
 
 var _ fmt.Formatter = (*SRQueue)(nil)
 
+// ToJSON returns the JSON representation of this SRQueue, or err if there was an error.
+// See SectionRun#toJSON
 func (q *SRQueue) ToJSON(sections []Section) (slice []SectionRunJSON, err error) {
 	slice = nil
 	var json SectionRunJSON
@@ -157,8 +195,8 @@ func (q *SRQueue) RemoveMatchingSection(sec Section) {
 	checkAndRemove(q.tail)
 }
 
-// RemoveById removes the SectionRun with the specified id and returns it, or returns nil if none existed
-func (q *SRQueue) RemoveById(id int32) *SectionRun {
+// RemoveByID removes the SectionRun with the specified id and returns it, or returns nil if none existed
+func (q *SRQueue) RemoveByID(id int32) *SectionRun {
 	for i := q.head; i != q.tail; i = (i + 1) % len(q.items) {
 		if q.items[i] != nil && q.items[i].RunID == id {
 			item := q.items[i]
@@ -173,15 +211,17 @@ func (q *SRQueue) RemoveById(id int32) *SectionRun {
 type SRState struct {
 	Queue   SRQueue
 	Current *SectionRun
+	Paused  bool
 	Mu      sync.Mutex
 }
 
 func newSRState() SRState {
 	return SRState{
-		newSRQueue(10), nil, sync.Mutex{},
+		newSRQueue(10), nil, false, sync.Mutex{},
 	}
 }
 
+// ToJSON returns the JSON representation of a SRState, or an error
 func (s *SRState) ToJSON(sections []Section) (json SRStateJSON, err error) {
 	json = SRStateJSON{}
 	json.Queue, err = s.Queue.ToJSON(sections)
@@ -195,6 +235,7 @@ func (s *SRState) ToJSON(sections []Section) (json SRStateJSON, err error) {
 	} else {
 		json.Current = nil
 	}
+	json.Paused = s.Paused
 	return
 }
 
@@ -203,6 +244,7 @@ type SectionRunner struct {
 	run           chan SectionRun
 	cancelSec     chan Section
 	cancelID      chan int32
+	paused        chan bool
 	quit          chan struct{}
 	nextID        int32
 	State         SRState
@@ -213,7 +255,8 @@ type SectionRunner struct {
 // NewSectionRunner creates a new SectionRunner without starting it
 func NewSectionRunner() *SectionRunner {
 	return &SectionRunner{
-		make(chan SectionRun, 2), make(chan Section, 2), make(chan int32, 2), make(chan struct{}),
+		make(chan SectionRun, 2), make(chan Section, 2), make(chan int32, 2),
+		make(chan bool, 2), make(chan struct{}),
 		0, newSRState(), nil,
 		Logger.WithField("module", "SectionRunner"),
 	}
@@ -254,7 +297,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			return
 		case item := <-r.run:
 			r.startUpdate()
-			if state.Current == nil {
+			if state.Current == nil && !state.Paused {
 				state.Current = &item
 				runItem()
 			} else {
@@ -275,7 +318,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			r.endUpdate()
 		case id := <-r.cancelID:
 			r.startUpdate()
-			state.Queue.RemoveById(id)
+			state.Queue.RemoveByID(id)
 			if state.Current != nil && state.Current.RunID == id {
 				finishRun()
 				runItem()
@@ -283,6 +326,30 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			r.log.WithFields(logrus.Fields{
 				"state": state, "id": id,
 			}).Debug("cancelled section run by id")
+			r.endUpdate()
+		case paused := <-r.paused:
+			r.startUpdate()
+			if state.Paused == paused { // no change necessary
+				break
+			}
+			if paused {
+				if state.Current != nil {
+					state.Current.Sec.SetState(false)
+					now := time.Now()
+					state.Current.PauseTime = &now
+					delay = nil // so it never receives
+				}
+				state.Paused = true
+				r.log.WithFields(logrus.Fields{
+					"state": state,
+				}).Debug("paused section runer")
+			} else {
+				if state.Current != nil {
+					// remaining := state.Current.Duration - (state.Current.PauseTime.Sub(state.Current.StartTime))
+					state.Current.PauseTime = nil
+					state.Current.Sec.SetState(true)
+				}
+			}
 			r.endUpdate()
 		case <-delay:
 			r.startUpdate()
@@ -328,7 +395,7 @@ func (r *SectionRunner) getNextID() int32 {
 // QueueSectionRun queues the specified Section to run for dur
 func (r *SectionRunner) QueueSectionRun(sec Section, dur time.Duration) (id int32) {
 	id = r.getNextID()
-	r.run <- SectionRun{id, sec, dur, nil, nil}
+	r.run <- NewSectionRun(id, sec, dur, nil)
 	return
 }
 
@@ -336,7 +403,7 @@ func (r *SectionRunner) QueueSectionRun(sec Section, dur time.Duration) (id int3
 func (r *SectionRunner) RunSectionAsync(sec Section, dur time.Duration) (id int32, done <-chan int) {
 	id = r.getNextID()
 	doneChan := make(chan int, 1)
-	r.run <- SectionRun{r.getNextID(), sec, dur, doneChan, nil}
+	r.run <- NewSectionRun(id, sec, dur, doneChan)
 	done = doneChan
 	return
 }
@@ -355,4 +422,14 @@ func (r *SectionRunner) CancelSection(sec Section) {
 // CancelID cancels the section run with the specified id
 func (r *SectionRunner) CancelID(id int32) {
 	r.cancelID <- id
+}
+
+// Pause pauses the currently running section run (if any) and stops processing the section run queue
+func (r *SectionRunner) Pause() {
+	r.paused <- true
+}
+
+// Unpause resumes both the paused section (if any) and processing of the section run queue
+func (r *SectionRunner) Unpause() {
+	r.paused <- false
 }

@@ -507,7 +507,7 @@ func (u *MQTTUpdater) run() {
 		case srState := <-u.onSectionRunnerUpdate:
 			ExhaustChan(u.onSectionRunnerUpdate)
 			srState.Mu.Lock()
-			u.logger.WithField("srState", *srState).Debugf("section runner update")
+			u.logger.WithField("srState", srState).Debugf("section runner update")
 			srState.Mu.Unlock()
 
 			err := u.api.UpdateSectionRunner(srState)
