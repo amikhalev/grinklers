@@ -8,7 +8,7 @@ SERVER_BINARY     = ./grinklers
 CLIENT_PACKAGE    = ./client
 CLIENT_BINARY     = ./grinklers_client
 
-GO := go
+GO      ?= go
 
 GO_PACKAGES      := $(shell go list ./...)
 GO_PACKAGE_PATHS := $(subst $(word 1,$(GO_PACKAGES)),./,$(GO_PACKAGES))
@@ -17,8 +17,7 @@ GO_TESTS         := $(shell find . -type f -name '*_test.go')
 
 STATIC_FILES = config.example.json
 
-TEST_TIMEOUT = 10s
-TEST_FLAGS  :=-timeout $(TEST_TIMEOUT)
+TEST_FLAGS  :=-timeout 10s
 COV_OUTPUT  := coverage.out
 COV_OUTPUTS := $(addsuffix /$(COV_OUTPUT),$(GO_PACKAGE_PATHS))
 COV_ALL     := ./coverage.all.out
@@ -33,7 +32,7 @@ DEPLOY_PATH  ?= /home/alex/grinklers
 
 CLEAN_FILES = $(SERVER_BINARY) $(CLIENT_BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
 
-.PHONY: all clean deps run client test cover deploy
+.PHONY: all clean deps run client test cover deploy docker
 
 all: $(SERVER_BINARY) $(CLIENT_BINARY)
 
@@ -87,3 +86,9 @@ $(DEPLOY_FILES): $(DEPLOY_DIR)/%: ./%
 deploy: $(DEPLOY_DIR) $(DEPLOY_BINARY) $(DEPLOY_FILES)
 	scp -r $(DEPLOY_DIR)/* $(DEPLOY_HOST):$(DEPLOY_PATH)/
 	@echo "deploy successfully completed"
+
+docker:
+	@echo "Building new binary for docker"
+	CGO_ENABLED=0 GOOS=linux make clean grinklers
+	@echo "Building docker container"
+	docker build -t grinklers .
