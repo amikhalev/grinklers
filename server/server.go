@@ -67,6 +67,8 @@ func main() {
 	for i := range programs {
 		programs[i].Quit()
 	}
+	secRunner.Quit()
+	waitGroup.Wait()
 	for i := range sections {
 		sections[i].SetState(false)
 	}

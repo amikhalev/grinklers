@@ -272,7 +272,7 @@ func (prog *Program) start(secRunner *SectionRunner, wait *sync.WaitGroup) {
 			switch msg {
 			case prQuit:
 				cancel()
-				prog.log.Debug("quitting runner")
+				prog.log.Debug("quitting program runner")
 				return
 			case prCancel:
 				cancel()
