@@ -464,12 +464,12 @@ func (u *MQTTUpdater) run() {
 
 			var err error
 			switch secUpdate.Type {
-			case supdateData:
+			case SecUpdateData:
 				err = u.api.UpdateSectionData(index, secUpdate.Sec)
 				if err == nil {
 					err = WriteConfig(u.config)
 				}
-			case supdateState:
+			case SecUpdateState:
 				err = u.api.UpdateSectionState(index, secUpdate.Sec)
 			default:
 			}

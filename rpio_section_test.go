@@ -11,21 +11,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestInitSection(t *testing.T) {
+func TestRpioSectionInit(t *testing.T) {
 	Logger.Out = ioutil.Discard
 
 	os.Setenv("RPI", "true")
-	assert.Error(t, InitSection())
-	CleanupSection()
+	assert.Error(t, RpioSectionInit())
+	RpioSectionCleanup()
 
 	os.Setenv("RPI", "")
-	assert.NoError(t, InitSection())
-	assert.NoError(t, CleanupSection())
+	assert.NoError(t, RpioSectionInit())
+	assert.NoError(t, RpioSectionCleanup())
 }
 
 func TestRpioSection_JSON(t *testing.T) {
 	os.Setenv("RPI", "")
-	InitSection()
+	RpioSectionInit()
 
 	ass := assert.New(t)
 	var sec RpioSection
@@ -47,7 +47,7 @@ func TestRpioSection_JSON(t *testing.T) {
 
 func TestRpioSections_JSON(t *testing.T) {
 	os.Setenv("RPI", "")
-	InitSection()
+	RpioSectionInit()
 
 	ass := assert.New(t)
 	var secs RpioSections
@@ -65,7 +65,7 @@ func TestRpioSections_JSON(t *testing.T) {
 
 func TestRpioSection_Update(t *testing.T) {
 	os.Setenv("RPI", "")
-	InitSection()
+	RpioSectionInit()
 
 	ass := assert.New(t)
 
@@ -79,7 +79,7 @@ func TestRpioSection_Update(t *testing.T) {
 	select {
 	case s := <-onUpdate:
 		ass.Equal(&sec, s.Sec)
-		ass.Equal(supdateState, s.Type)
+		ass.Equal(SecUpdateState, s.Type)
 	default:
 		ass.Fail("no update received")
 	}
@@ -90,7 +90,7 @@ func TestRpioSection_Update(t *testing.T) {
 	select {
 	case s := <-onUpdate:
 		ass.Equal(&sec, s.Sec)
-		ass.Equal(supdateState, s.Type)
+		ass.Equal(SecUpdateState, s.Type)
 	default:
 		ass.Fail("no update received")
 	}
@@ -102,7 +102,7 @@ func TestRpioSection_SetState(t *testing.T) {
 	ass := assert.New(t)
 
 	os.Setenv("RPI", "true")
-	ass.Error(InitSection())
+	ass.Error(RpioSectionInit())
 
 	sec := NewRpioSection("test", 5)
 
@@ -122,7 +122,7 @@ func TestRpioSection_SetState(t *testing.T) {
 
 func TestRpioSection_Run(t *testing.T) {
 	os.Setenv("RPI", "")
-	InitSection()
+	RpioSectionInit()
 
 	ass := assert.New(t)
 	secRunner := NewSectionRunner()

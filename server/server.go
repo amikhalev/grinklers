@@ -17,11 +17,11 @@ func main() {
 
 	godotenv.Load()
 
-	err := g.InitSection()
+	err := g.RpioSectionInit()
 	if err != nil {
 		log.WithError(err).Fatalf("error initializing sections")
 	}
-	defer g.CleanupSection()
+	defer g.RpioSectionCleanup()
 
 	config, err := g.LoadConfig()
 	if err != nil {
