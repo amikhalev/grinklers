@@ -316,6 +316,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 		case paused := <-r.paused:
 			r.startUpdate()
 			if state.Paused == paused { // no change necessary
+				r.endUpdate()
 				break
 			}
 			if paused {
