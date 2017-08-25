@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"testing"
 	"time"
+	"os"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -35,6 +36,11 @@ func (m *MockSection) SetOnUpdate(onUpdate chan<- SecUpdate) {
 
 func (m *MockSection) Name() string {
 	return m.name
+}
+
+func (m *MockSection) SetupReturns() {
+	m.On("SetState", true).Return()
+	m.On("SetState", false).Return()
 }
 
 var _ Section = (*MockSection)(nil)
@@ -206,8 +212,7 @@ func (s *SectionRunnerSuite) TestSectionQueue() {
 }
 
 func (s *SectionRunnerSuite) TestRunAsync() {
-	s.sec1.On("SetState", true).Return()
-	s.sec1.On("SetState", false).Return()
+	s.sec1.SetupReturns()
 	s.ass.Equal(false, s.sec1.State(), "sec1 should be off")
 	_, c := s.sr.RunSectionAsync(s.sec1, 50*time.Millisecond)
 	time.Sleep(25 * time.Millisecond)
@@ -217,8 +222,7 @@ func (s *SectionRunnerSuite) TestRunAsync() {
 }
 
 func (s *SectionRunnerSuite) TestCancel() {
-	s.sec1.On("SetState", true).Return()
-	s.sec1.On("SetState", false).Return()
+	s.sec1.SetupReturns()
 
 	s.sr.QueueSectionRun(s.sec1, time.Minute)
 	s.sr.QueueSectionRun(s.sec2, time.Minute)
@@ -232,17 +236,40 @@ func (s *SectionRunnerSuite) TestCancel() {
 }
 
 func (s *SectionRunnerSuite) TestPause() {
-	s.sec1.On("SetState", true).Return()
-	s.sec1.On("SetState", false).Return()
+	Logger.Out = os.Stdout
+	s.sec1.SetupReturns()
+	s.sec2.SetupReturns()
 
-	s.sr.QueueSectionRun(s.sec1, time.Minute)
+	id1 := s.sr.QueueSectionRun(s.sec1, time.Minute)
 	time.Sleep(10 * time.Millisecond)
-	s.sec1.AssertCalled(s.T(), "SetState", true)
-	s.sec1.Calls = nil
+	s.ass.True(s.sec1.State(), "Section should be running")
 	s.sr.Pause()
 	time.Sleep(10 * time.Millisecond)
-	s.ass.True(s.sr.State.Paused)
-	s.sec1.AssertCalled(s.T(), "SetState", false)
+	s.ass.True(s.sr.State.Paused, "SectionRunner should be paused")
+	s.ass.False(s.sec1.State(), "Section should not be running")
+	s.sr.Unpause()
+	time.Sleep(10 * time.Millisecond)
+	s.ass.False(s.sr.State.Paused, "SectionRunner should not be paused")
+	s.ass.True(s.sec1.State(), "Section should be running")
+
+	s.sr.QueueSectionRun(s.sec2, 40 * time.Millisecond)
+	s.sr.Pause()
+	s.sr.CancelID(id1)
+	time.Sleep(10 * time.Millisecond)
+	s.ass.True(s.sr.State.Paused, "SectionRunner should be paused")
+	s.ass.False(s.sec1.State(), "Section should not be running")
+	s.ass.False(s.sec2.State(), "Section should not be running")
+	s.sr.Unpause()
+	time.Sleep(20 * time.Millisecond)
+	s.ass.True(s.sec2.State(), "Section should be running")
+	s.sr.Pause()
+	time.Sleep(10 * time.Millisecond)
+	s.ass.False(s.sec2.State(), "Section should not be running")
+	s.sr.Unpause()
+	time.Sleep(30 * time.Millisecond) 
+	// It should have started for 20 ms, then paused for 10 ms, then run again for 30 ms.
+	// So 20ms + 30ms > 40ms, should be done
+	s.ass.False(s.sec2.State(), "Section should not be running")
 }
 
 func TestSectionRunner(t *testing.T) {
