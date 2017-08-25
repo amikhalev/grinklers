@@ -247,6 +247,10 @@ func (s *SectionRunnerSuite) TestPause() {
 	time.Sleep(10 * time.Millisecond)
 	s.ass.True(s.sr.State.Paused, "SectionRunner should be paused")
 	s.ass.False(s.sec1.State(), "Section should not be running")
+	s.sr.Pause() // double pause should change nothing
+	time.Sleep(10 * time.Millisecond)
+	s.ass.True(s.sr.State.Paused, "SectionRunner should be paused")
+	s.ass.False(s.sec1.State(), "Section should not be running")
 	s.sr.Unpause()
 	time.Sleep(10 * time.Millisecond)
 	s.ass.False(s.sr.State.Paused, "SectionRunner should not be paused")
