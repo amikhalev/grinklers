@@ -50,25 +50,6 @@ func NewSectionRun(runID int32, sec Section, duration time.Duration, doneChan ch
 	}
 }
 
-// RemainingFrom returns how much time was remaining on this section run at time reference
-func (sr *SectionRun) RemainingFrom(reference time.Time) *time.Duration {
-	if sr.StartTime == nil {
-		return nil
-	}
-	dur := sr.Duration - (reference.Sub(*sr.StartTime))
-	return &dur
-}
-
-// RemainingNow returns how much longer is remaining for this section run right now, if it is running.
-// If it is paused, this will take into account when it was paused and not change as time passes
-// If it is not running, it will return nil
-func (sr *SectionRun) RemainingNow() *time.Duration {
-	if sr.PauseTime != nil {
-		return sr.RemainingFrom(*sr.PauseTime)
-	}
-	return sr.RemainingFrom(time.Now())
-}
-
 func (sr *SectionRun) String() string {
 	return fmt.Sprintf("{'%s' for %v}", sr.Sec.Name(), sr.Duration)
 }
@@ -273,10 +254,15 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			return
 		}
 		r.log.WithField("state", state).Info("running section")
-		state.Current.Sec.SetState(true)
 		startTime := time.Now()
 		state.Current.StartTime = &startTime
-		delay = time.After(state.Current.Duration)
+		if state.Paused {
+			delay = nil
+			state.Current.PauseTime = &startTime
+		} else {
+			state.Current.Sec.SetState(true)
+			delay = time.After(state.Current.Duration)
+		}
 	}
 	finishRun := func() {
 		state.Current.Sec.SetState(false)
@@ -342,13 +328,21 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 				state.Paused = true
 				r.log.WithFields(logrus.Fields{
 					"state": state,
-				}).Debug("paused section runer")
+				}).Debug("paused section runner")
 			} else {
 				if state.Current != nil {
-					// remaining := state.Current.Duration - (state.Current.PauseTime.Sub(state.Current.StartTime))
+					alreadyRunFor := (state.Current.PauseTime.Sub(*state.Current.StartTime))
+					remaining := state.Current.Duration - alreadyRunFor
+					r.log.WithFields(logrus.Fields{
+						"alreadyRunFor": alreadyRunFor,
+						"remaining": remaining,
+						"run": state.Current,
+					}).Debug("resuming paused section")
+					delay = time.After(remaining)
 					state.Current.PauseTime = nil
 					state.Current.Sec.SetState(true)
 				}
+				state.Paused = false
 			}
 			r.endUpdate()
 		case <-delay:
