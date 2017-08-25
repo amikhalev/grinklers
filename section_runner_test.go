@@ -4,7 +4,6 @@ import (
 	"io/ioutil"
 	"testing"
 	"time"
-	"os"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -14,11 +13,12 @@ import (
 type MockSection struct {
 	state bool
 	name  string
+	a     *assert.Assertions
 	mock.Mock
 }
 
-func newMockSection(name string) *MockSection {
-	return &MockSection{false, name, mock.Mock{}}
+func newMockSection(name string, t *testing.T) *MockSection {
+	return &MockSection{false, name, assert.New(t), mock.Mock{}}
 }
 
 func (m *MockSection) SetState(on bool) {
@@ -43,11 +43,19 @@ func (m *MockSection) SetupReturns() {
 	m.On("SetState", false).Return()
 }
 
+func (m *MockSection) AssertRunning() {
+	m.a.True(m.State(), "Section %s should be running", m.name)
+}
+
+func (m *MockSection) AssertNotRunning() {
+	m.a.False(m.State(), "Section %s should not be running", m.name)
+}
+
 var _ Section = (*MockSection)(nil)
 
 func TestSectionRun_String(t *testing.T) {
-	sec := newMockSection("sec")
-	sr := NewSectionRun(0, sec, 1 * time.Second, nil)
+	sec := newMockSection("sec", t)
+	sr := NewSectionRun(0, sec, 1*time.Second, nil)
 	assert.Equal(t, "{'sec' for 1s}", sr.String())
 }
 
@@ -62,9 +70,9 @@ type SRQueueSuite struct {
 
 func (s *SRQueueSuite) SetupSuite() {
 	s.a = assert.New(s.T())
-	s.sec1 = newMockSection("mock 1")
-	s.sec2 = newMockSection("mock 2")
-	s.sec3 = newMockSection("mock 3")
+	s.sec1 = newMockSection("mock 1", s.T())
+	s.sec2 = newMockSection("mock 2", s.T())
+	s.sec3 = newMockSection("mock 3", s.T())
 }
 
 func (s *SRQueueSuite) SetupTest() {
@@ -75,9 +83,9 @@ func (s *SRQueueSuite) TestPushPop() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := NewSectionRun(0, s.sec1, 5 * time.Second, nil)
-	item2 := NewSectionRun(0, s.sec2, 10 * time.Second, nil)
-	item3 := NewSectionRun(0, s.sec3, 15 * time.Second, nil)
+	item1 := NewSectionRun(0, s.sec1, 5*time.Second, nil)
+	item2 := NewSectionRun(0, s.sec2, 10*time.Second, nil)
+	item3 := NewSectionRun(0, s.sec3, 15*time.Second, nil)
 
 	ass.Nil(queue.Pop(), "Pop() should be nil when empty")
 	ass.Equal(0, queue.Len(), "Len() should be 0 when empty")
@@ -99,9 +107,9 @@ func (s *SRQueueSuite) TestOverflow() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := NewSectionRun(0, s.sec1, 5 * time.Second, nil)
-	item2 := NewSectionRun(0, s.sec2, 10 * time.Second, nil)
-	item3 := NewSectionRun(0, s.sec3, 15 * time.Second, nil)
+	item1 := NewSectionRun(0, s.sec1, 5*time.Second, nil)
+	item2 := NewSectionRun(0, s.sec2, 10*time.Second, nil)
+	item3 := NewSectionRun(0, s.sec3, 15*time.Second, nil)
 
 	queue.Push(&item1)
 	ass.Equal(1, queue.Len(), "Len() does not match")
@@ -122,8 +130,8 @@ func (s *SRQueueSuite) TestNilPop() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := NewSectionRun(0, s.sec1, 5 * time.Second, nil)
-	item2 := NewSectionRun(0, s.sec2, 10 * time.Second, nil)
+	item1 := NewSectionRun(0, s.sec1, 5*time.Second, nil)
+	item2 := NewSectionRun(0, s.sec2, 10*time.Second, nil)
 
 	queue.Push(&item1)
 	queue.Push(nil)
@@ -138,9 +146,9 @@ func (s *SRQueueSuite) TestRemove() {
 	ass := s.a
 	queue := s.queue
 
-	item1 := NewSectionRun(0, s.sec1, 5 * time.Second, nil)
-	item2 := NewSectionRun(0, s.sec2, 10 * time.Second, nil)
-	item3 := NewSectionRun(0, s.sec3, 15 * time.Second, nil)
+	item1 := NewSectionRun(0, s.sec1, 5*time.Second, nil)
+	item2 := NewSectionRun(0, s.sec2, 10*time.Second, nil)
+	item3 := NewSectionRun(0, s.sec3, 15*time.Second, nil)
 
 	queue.Push(&item1)
 	queue.Push(&item2)
@@ -165,6 +173,7 @@ type SectionRunnerSuite struct {
 	sr   *SectionRunner
 	sec1 *MockSection
 	sec2 *MockSection
+	secs []Section
 }
 
 func (s *SectionRunnerSuite) SetupSuite() {
@@ -173,8 +182,9 @@ func (s *SectionRunnerSuite) SetupSuite() {
 
 func (s *SectionRunnerSuite) SetupTest() {
 	Logger.Out = ioutil.Discard
-	s.sec1 = newMockSection("mock 1")
-	s.sec2 = newMockSection("mock 2")
+	s.sec1 = newMockSection("mock 1", s.T())
+	s.sec2 = newMockSection("mock 2", s.T())
+	s.secs = []Section{s.sec1, s.sec2}
 	s.sr = NewSectionRunner()
 	s.sr.Start(nil)
 	s.ass.NotNil(s.sr)
@@ -213,30 +223,81 @@ func (s *SectionRunnerSuite) TestSectionQueue() {
 
 func (s *SectionRunnerSuite) TestRunAsync() {
 	s.sec1.SetupReturns()
-	s.ass.Equal(false, s.sec1.State(), "sec1 should be off")
+	s.sec1.AssertNotRunning()
 	_, c := s.sr.RunSectionAsync(s.sec1, 50*time.Millisecond)
 	time.Sleep(25 * time.Millisecond)
-	s.ass.Equal(true, s.sec1.State(), "sec1 should be on")
+	s.sec1.AssertRunning()
 	<-c
-	s.ass.Equal(false, s.sec1.State(), "sec1 should be off")
+	s.sec1.AssertNotRunning()
 }
 
-func (s *SectionRunnerSuite) TestCancel() {
+func (s *SectionRunnerSuite) TestCancelSection() {
 	s.sec1.SetupReturns()
+	s.sec2.SetupReturns()
 
 	s.sr.QueueSectionRun(s.sec1, time.Minute)
 	s.sr.QueueSectionRun(s.sec2, time.Minute)
-	time.Sleep(100 * time.Millisecond)
-	s.sr.CancelSection(s.sec2)
-	s.sr.CancelSection(s.sec1)
-	time.Sleep(50 * time.Millisecond)
 
-	s.sec2.AssertNotCalled(s.T(), "SetState", true)
-	s.sec2.AssertNotCalled(s.T(), "SetState", false)
+	time.Sleep(10 * time.Millisecond)
+	queue, _ := s.sr.State.Queue.ToJSON(s.secs)
+	s.ass.Len(queue, 1, "There should be 1 item in the queue")
+	s.ass.Equal(queue[0].Section, 1)
+	s.sec2.AssertNotRunning()
+	s.sec1.AssertRunning()
+
+	s.sr.CancelSection(s.sec2)
+	time.Sleep(10 * time.Millisecond)
+	queue, _ = s.sr.State.Queue.ToJSON(s.secs)
+	s.ass.Len(queue, 0, "There should be 0 items in the queue")
+	s.sec2.AssertNotRunning()
+	s.sec1.AssertRunning()
+
+	s.sr.QueueSectionRun(s.sec2, time.Minute)
+	s.sr.CancelSection(s.sec1)
+	time.Sleep(10 * time.Millisecond)
+	queue, _ = s.sr.State.Queue.ToJSON(s.secs)
+	s.ass.Len(queue, 0, "There should be 0 items in the queue")
+	s.sec2.AssertRunning()
+	s.sec1.AssertNotRunning()
+
+	s.sr.CancelSection(s.sec2)
+	time.Sleep(10 * time.Millisecond)
+}
+
+func (s *SectionRunnerSuite) TestCancelID() {
+	s.sec1.SetupReturns()
+	s.sec2.SetupReturns()
+
+	id1 := s.sr.QueueSectionRun(s.sec1, time.Minute)
+	id2 := s.sr.QueueSectionRun(s.sec2, time.Minute)
+
+	time.Sleep(10 * time.Millisecond)
+	queue, _ := s.sr.State.Queue.ToJSON(s.secs)
+	s.ass.Len(queue, 1, "There should be 1 item in the queue")
+	s.ass.Equal(queue[0].Section, 1)
+	s.sec2.AssertNotRunning()
+	s.sec1.AssertRunning()
+
+	s.sr.CancelID(id2)
+	time.Sleep(10 * time.Millisecond)
+	queue, _ = s.sr.State.Queue.ToJSON(s.secs)
+	s.ass.Len(queue, 0, "There should be 0 items in the queue")
+	s.sec2.AssertNotRunning()
+	s.sec1.AssertRunning()
+
+	id2 = s.sr.QueueSectionRun(s.sec2, time.Minute)
+	s.sr.CancelID(id1)
+	time.Sleep(10 * time.Millisecond)
+	queue, _ = s.sr.State.Queue.ToJSON(s.secs)
+	s.ass.Len(queue, 0, "There should be 0 items in the queue")
+	s.sec2.AssertRunning()
+	s.sec1.AssertNotRunning()
+
+	s.sr.CancelID(id2)
+	time.Sleep(10 * time.Millisecond)
 }
 
 func (s *SectionRunnerSuite) TestPause() {
-	Logger.Out = os.Stdout
 	s.sec1.SetupReturns()
 	s.sec2.SetupReturns()
 
@@ -256,7 +317,7 @@ func (s *SectionRunnerSuite) TestPause() {
 	s.ass.False(s.sr.State.Paused, "SectionRunner should not be paused")
 	s.ass.True(s.sec1.State(), "Section should be running")
 
-	s.sr.QueueSectionRun(s.sec2, 40 * time.Millisecond)
+	s.sr.QueueSectionRun(s.sec2, 40*time.Millisecond)
 	s.sr.Pause()
 	s.sr.CancelID(id1)
 	time.Sleep(10 * time.Millisecond)
@@ -270,7 +331,7 @@ func (s *SectionRunnerSuite) TestPause() {
 	time.Sleep(10 * time.Millisecond)
 	s.ass.False(s.sec2.State(), "Section should not be running")
 	s.sr.Unpause()
-	time.Sleep(30 * time.Millisecond) 
+	time.Sleep(30 * time.Millisecond)
 	// It should have started for 20 ms, then paused for 10 ms, then run again for 30 ms.
 	// So 20ms + 30ms > 40ms, should be done
 	s.ass.False(s.sec2.State(), "Section should not be running")

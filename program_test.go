@@ -224,8 +224,8 @@ func (s *ProgramSuite) SetupTest() {
 	/*Logger.Out =*/ _ = os.Stdout
 	Logger.Level = logrus.DebugLevel
 	Logger.Warn("ayyyo")
-	s.sec1 = newMockSection("sec1")
-	s.sec2 = newMockSection("sec2")
+	s.sec1 = newMockSection("sec1", s.T())
+	s.sec2 = newMockSection("sec2", s.T())
 	s.secRunner = NewSectionRunner()
 	s.secRunner.Start(s.waitGroup)
 }
@@ -277,10 +277,8 @@ func (s *ProgramSuite) TestProgram_Run() {
 }
 
 func (s *ProgramSuite) SetupSecs() {
-	s.sec1.On("SetState", true).Return()
-	s.sec1.On("SetState", false).Return()
-	s.sec2.On("SetState", true).Return()
-	s.sec2.On("SetState", false).Return()
+	s.sec1.SetupReturns()
+	s.sec2.SetupReturns()
 }
 
 func (s *ProgramSuite) TestProgram_Schedule() {
