@@ -13,12 +13,12 @@ import (
 type MockSection struct {
 	state bool
 	name  string
-	a     *assert.Assertions
+	t     *testing.T
 	mock.Mock
 }
 
 func newMockSection(name string, t *testing.T) *MockSection {
-	return &MockSection{false, name, assert.New(t), mock.Mock{}}
+	return &MockSection{false, name, t, mock.Mock{}}
 }
 
 func (m *MockSection) SetState(on bool) {
@@ -44,11 +44,15 @@ func (m *MockSection) SetupReturns() {
 }
 
 func (m *MockSection) AssertRunning() {
-	m.a.True(m.State(), "Section %s should be running", m.name)
+	assert.True(m.t, m.State(), "Section %s should be running", m.name)
 }
 
 func (m *MockSection) AssertNotRunning() {
-	m.a.False(m.State(), "Section %s should not be running", m.name)
+	assert.False(m.t, m.State(), "Section %s should not be running", m.name)
+}
+
+func (m *MockSection) AssertAllCalled() {
+	m.AssertExpectations(m.t)
 }
 
 var _ Section = (*MockSection)(nil)
@@ -191,8 +195,6 @@ func (s *SectionRunnerSuite) SetupTest() {
 }
 
 func (s *SectionRunnerSuite) TearDownTest() {
-	s.sec1.AssertExpectations(s.T())
-	s.sec2.AssertExpectations(s.T())
 	s.sr.Quit()
 }
 
@@ -204,6 +206,8 @@ func (s *SectionRunnerSuite) TestRunSection() {
 		})
 
 	s.sr.RunSection(s.sec1, 10*time.Nanosecond)
+	s.sec1.AssertAllCalled()
+	s.sec2.AssertAllCalled()
 }
 
 func (s *SectionRunnerSuite) TestSectionQueue() {
@@ -219,6 +223,19 @@ func (s *SectionRunnerSuite) TestSectionQueue() {
 	s.sr.QueueSectionRun(s.sec1, 10*time.Nanosecond)
 	s.sr.QueueSectionRun(s.sec2, 10*time.Nanosecond)
 	time.Sleep(50 * time.Millisecond)
+	s.sec1.AssertAllCalled()
+	s.sec2.AssertAllCalled()
+}
+
+func (s *SectionRunnerSuite) TestStateToJSON() {
+	s.sec1.SetupReturns()
+
+	s.sr.QueueSectionRun(s.sec1, time.Minute)
+	s.sr.QueueSectionRun(s.sec2, time.Minute)
+	time.Sleep(10 * time.Millisecond)
+
+	_, err := s.sr.State.ToJSON([]Section{s.sec1})
+	s.ass.Error(err, "should error because passed sections doesn't contian s.sec2")
 }
 
 func (s *SectionRunnerSuite) TestRunAsync() {
@@ -227,8 +244,26 @@ func (s *SectionRunnerSuite) TestRunAsync() {
 	_, c := s.sr.RunSectionAsync(s.sec1, 50*time.Millisecond)
 	time.Sleep(25 * time.Millisecond)
 	s.sec1.AssertRunning()
+	
+	s.sr.State.Mu.Lock()
+	json, err := s.sr.State.ToJSON(s.secs)
+	s.sr.State.Mu.Unlock()
+	s.ass.NoError(err)
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Empty(json.Queue)
+
 	<-c
 	s.sec1.AssertNotRunning()
+
+	s.sr.State.Mu.Lock()
+	json, err = s.sr.State.ToJSON(s.secs)
+	s.sr.State.Mu.Unlock()
+	s.ass.NoError(err)
+	s.ass.Nil(json.Current)
+	s.ass.Empty(json.Queue)
+
+	s.sec1.AssertAllCalled()
+	s.sec2.AssertAllCalled()
 }
 
 func (s *SectionRunnerSuite) TestCancelSection() {
@@ -239,29 +274,39 @@ func (s *SectionRunnerSuite) TestCancelSection() {
 	s.sr.QueueSectionRun(s.sec2, time.Minute)
 
 	time.Sleep(10 * time.Millisecond)
-	queue, _ := s.sr.State.Queue.ToJSON(s.secs)
-	s.ass.Len(queue, 1, "There should be 1 item in the queue")
-	s.ass.Equal(queue[0].Section, 1)
+	json, _ := s.sr.State.ToJSON(s.secs)
+	s.ass.Len(json.Queue, 1, "There should be 1 item in the queue")
+	s.ass.Equal(1, json.Queue[0].Section)
+	s.ass.Equal(60.0, json.Queue[0].Duration)
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
 	s.sec2.AssertNotRunning()
 	s.sec1.AssertRunning()
 
 	s.sr.CancelSection(s.sec2)
 	time.Sleep(10 * time.Millisecond)
-	queue, _ = s.sr.State.Queue.ToJSON(s.secs)
-	s.ass.Len(queue, 0, "There should be 0 items in the queue")
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.Empty(json.Queue, "There should be 0 items in the queue")
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
 	s.sec2.AssertNotRunning()
 	s.sec1.AssertRunning()
 
 	s.sr.QueueSectionRun(s.sec2, time.Minute)
 	s.sr.CancelSection(s.sec1)
 	time.Sleep(10 * time.Millisecond)
-	queue, _ = s.sr.State.Queue.ToJSON(s.secs)
-	s.ass.Len(queue, 0, "There should be 0 items in the queue")
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.Empty(json.Queue, "There should be 0 items in the queue")
+	s.ass.Equal(1, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
 	s.sec2.AssertRunning()
 	s.sec1.AssertNotRunning()
 
 	s.sr.CancelSection(s.sec2)
 	time.Sleep(10 * time.Millisecond)
+
+	s.sec1.AssertAllCalled()
+	s.sec2.AssertAllCalled()
 }
 
 func (s *SectionRunnerSuite) TestCancelID() {
@@ -272,29 +317,39 @@ func (s *SectionRunnerSuite) TestCancelID() {
 	id2 := s.sr.QueueSectionRun(s.sec2, time.Minute)
 
 	time.Sleep(10 * time.Millisecond)
-	queue, _ := s.sr.State.Queue.ToJSON(s.secs)
-	s.ass.Len(queue, 1, "There should be 1 item in the queue")
-	s.ass.Equal(queue[0].Section, 1)
+	json, _ := s.sr.State.ToJSON(s.secs)
+	s.ass.Len(json.Queue, 1, "There should be 1 item in the queue")
+	s.ass.Equal(1, json.Queue[0].Section)
+	s.ass.Equal(60.0, json.Queue[0].Duration)
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
 	s.sec2.AssertNotRunning()
 	s.sec1.AssertRunning()
 
 	s.sr.CancelID(id2)
 	time.Sleep(10 * time.Millisecond)
-	queue, _ = s.sr.State.Queue.ToJSON(s.secs)
-	s.ass.Len(queue, 0, "There should be 0 items in the queue")
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.Empty(json.Queue, "There should be 0 items in the queue")
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
 	s.sec2.AssertNotRunning()
 	s.sec1.AssertRunning()
 
 	id2 = s.sr.QueueSectionRun(s.sec2, time.Minute)
 	s.sr.CancelID(id1)
 	time.Sleep(10 * time.Millisecond)
-	queue, _ = s.sr.State.Queue.ToJSON(s.secs)
-	s.ass.Len(queue, 0, "There should be 0 items in the queue")
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.Empty(json.Queue, "There should be 0 items in the queue")
+	s.ass.Equal(1, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
 	s.sec2.AssertRunning()
 	s.sec1.AssertNotRunning()
 
 	s.sr.CancelID(id2)
 	time.Sleep(10 * time.Millisecond)
+
+	s.sec1.AssertAllCalled()
+	s.sec2.AssertAllCalled()
 }
 
 func (s *SectionRunnerSuite) TestPause() {
@@ -304,18 +359,43 @@ func (s *SectionRunnerSuite) TestPause() {
 	id1 := s.sr.QueueSectionRun(s.sec1, time.Minute)
 	time.Sleep(10 * time.Millisecond)
 	s.ass.True(s.sec1.State(), "Section should be running")
+
+	json, _ := s.sr.State.ToJSON(s.secs)
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
+
 	s.sr.Pause()
 	time.Sleep(10 * time.Millisecond)
 	s.ass.True(s.sr.State.Paused, "SectionRunner should be paused")
 	s.ass.False(s.sec1.State(), "Section should not be running")
+
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.True(json.Paused)
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
+	s.ass.NotNil(json.Current.PauseTime)
+
 	s.sr.Pause() // double pause should change nothing
 	time.Sleep(10 * time.Millisecond)
 	s.ass.True(s.sr.State.Paused, "SectionRunner should be paused")
 	s.ass.False(s.sec1.State(), "Section should not be running")
+
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.True(json.Paused)
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
+	s.ass.NotNil(json.Current.PauseTime)
+
 	s.sr.Unpause()
 	time.Sleep(10 * time.Millisecond)
 	s.ass.False(s.sr.State.Paused, "SectionRunner should not be paused")
 	s.ass.True(s.sec1.State(), "Section should be running")
+	
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.False(json.Paused)
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.Duration)
+	s.ass.Nil(json.Current.PauseTime)
 
 	s.sr.QueueSectionRun(s.sec2, 40*time.Millisecond)
 	s.sr.Pause()
@@ -324,17 +404,45 @@ func (s *SectionRunnerSuite) TestPause() {
 	s.ass.True(s.sr.State.Paused, "SectionRunner should be paused")
 	s.ass.False(s.sec1.State(), "Section should not be running")
 	s.ass.False(s.sec2.State(), "Section should not be running")
+
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.True(json.Paused)
+	s.ass.Equal(1, json.Current.Section)
+	s.ass.Equal(0.04, json.Current.Duration)
+	s.ass.NotNil(json.Current.PauseTime)
+
 	s.sr.Unpause()
 	time.Sleep(20 * time.Millisecond)
 	s.ass.True(s.sec2.State(), "Section should be running")
+
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.False(json.Paused)
+	s.ass.Equal(1, json.Current.Section)
+	s.ass.Equal(0.04, json.Current.Duration)
+	s.ass.Nil(json.Current.PauseTime)
+
 	s.sr.Pause()
 	time.Sleep(10 * time.Millisecond)
 	s.ass.False(s.sec2.State(), "Section should not be running")
+
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.True(json.Paused)
+	s.ass.Equal(1, json.Current.Section)
+	s.ass.Equal(0.04, json.Current.Duration)
+	s.ass.NotNil(json.Current.PauseTime)
+
 	s.sr.Unpause()
 	time.Sleep(30 * time.Millisecond)
 	// It should have started for 20 ms, then paused for 10 ms, then run again for 30 ms.
 	// So 20ms + 30ms > 40ms, should be done
 	s.ass.False(s.sec2.State(), "Section should not be running")
+
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.False(json.Paused)
+	s.ass.Nil(json.Current)
+
+	s.sec1.AssertAllCalled()
+	s.sec2.AssertAllCalled()
 }
 
 func TestSectionRunner(t *testing.T) {
