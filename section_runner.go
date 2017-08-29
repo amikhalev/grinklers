@@ -190,10 +190,10 @@ func (q *SRQueue) RemoveByID(id int32) *SectionRun {
 
 // SRState is the state of the SectionRunner. All accesses synchronized over Mu
 type SRState struct {
-	Queue   SRQueue
-	Current *SectionRun
-	Paused  bool
-	Mu      sync.Mutex
+	Queue      SRQueue
+	Current    *SectionRun
+	Paused     bool
+	sync.Mutex // gives it Lock() and Unlock methods
 }
 
 func newSRState() SRState {
@@ -218,6 +218,10 @@ func (s *SRState) ToJSON(sections []Section) (json SRStateJSON, err error) {
 	}
 	json.Paused = s.Paused
 	return
+}
+
+func (s *SRState) String() string {
+	return fmt.Sprintf("{Current: %v, Queue: %v, Paused: %t}", s.Current, s.Queue, s.Paused)
 }
 
 // SectionRunner runs a queue of sections
@@ -246,6 +250,10 @@ func NewSectionRunner() *SectionRunner {
 func (r *SectionRunner) start(wait *sync.WaitGroup) {
 	r.stateUpdate()
 	state := &r.State
+	endUpdate := func() {
+		r.State.Unlock()
+		r.stateUpdate()
+	}
 	var (
 		delay <-chan time.Time
 	)
@@ -282,7 +290,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			r.log.Debug("quiting section runner")
 			return
 		case item := <-r.run:
-			r.startUpdate()
+			state.Lock()
 			if state.Current == nil && !state.Paused {
 				state.Current = &item
 				runItem()
@@ -290,9 +298,9 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 				state.Queue.Push(&item)
 				r.log.WithField("state", state).Debug("queued section run")
 			}
-			r.endUpdate()
+			endUpdate()
 		case sec := <-r.cancelSec:
-			r.startUpdate()
+			state.Lock()
 			state.Queue.RemoveMatchingSection(sec)
 			if state.Current != nil && state.Current.Sec == sec {
 				finishRun()
@@ -301,9 +309,9 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			r.log.WithFields(logrus.Fields{
 				"state": state, "sec": sec.Name(),
 			}).Debug("cancelled section runs with section")
-			r.endUpdate()
+			endUpdate()
 		case id := <-r.cancelID:
-			r.startUpdate()
+			state.Lock()
 			state.Queue.RemoveByID(id)
 			if state.Current != nil && state.Current.RunID == id {
 				finishRun()
@@ -312,11 +320,11 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			r.log.WithFields(logrus.Fields{
 				"state": state, "id": id,
 			}).Debug("cancelled section run by id")
-			r.endUpdate()
+			endUpdate()
 		case paused := <-r.paused:
-			r.startUpdate()
+			state.Lock()
 			if state.Paused == paused { // no change necessary
-				r.endUpdate()
+				state.Unlock()
 				break
 			}
 			if paused {
@@ -336,8 +344,8 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 					remaining := state.Current.Duration - alreadyRunFor
 					r.log.WithFields(logrus.Fields{
 						"alreadyRunFor": alreadyRunFor,
-						"remaining": remaining,
-						"run": state.Current,
+						"remaining":     remaining,
+						"run":           state.Current,
 					}).Debug("resuming paused section")
 					delay = time.After(remaining)
 					state.Current.PauseTime = nil
@@ -345,12 +353,12 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 				}
 				state.Paused = false
 			}
-			r.endUpdate()
+			endUpdate()
 		case <-delay:
-			r.startUpdate()
+			state.Lock()
 			finishRun()
 			runItem()
-			r.endUpdate()
+			endUpdate()
 		}
 	}
 }
@@ -359,15 +367,6 @@ func (r *SectionRunner) stateUpdate() {
 	if r.OnUpdateState != nil {
 		r.OnUpdateState <- &r.State
 	}
-}
-
-func (r *SectionRunner) startUpdate() {
-	r.State.Mu.Lock()
-}
-
-func (r *SectionRunner) endUpdate() {
-	r.State.Mu.Unlock()
-	r.stateUpdate()
 }
 
 // Start starts the background goroutine of a SectionRunner

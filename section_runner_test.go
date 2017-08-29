@@ -245,9 +245,9 @@ func (s *SectionRunnerSuite) TestRunAsync() {
 	time.Sleep(25 * time.Millisecond)
 	s.sec1.AssertRunning()
 	
-	s.sr.State.Mu.Lock()
+	s.sr.State.Lock()
 	json, err := s.sr.State.ToJSON(s.secs)
-	s.sr.State.Mu.Unlock()
+	s.sr.State.Unlock()
 	s.ass.NoError(err)
 	s.ass.Equal(0, json.Current.Section)
 	s.ass.Empty(json.Queue)
@@ -255,9 +255,9 @@ func (s *SectionRunnerSuite) TestRunAsync() {
 	<-c
 	s.sec1.AssertNotRunning()
 
-	s.sr.State.Mu.Lock()
+	s.sr.State.Lock()
 	json, err = s.sr.State.ToJSON(s.secs)
-	s.sr.State.Mu.Unlock()
+	s.sr.State.Unlock()
 	s.ass.NoError(err)
 	s.ass.Nil(json.Current)
 	s.ass.Empty(json.Queue)

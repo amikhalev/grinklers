@@ -77,6 +77,7 @@ func (a *MQTTApi) Start() (err error) {
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		a.logger.Info("connected to mqtt broker")
 		a.updateConnected(true)
+		a.UpdateAll()
 	})
 	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
 		a.logger.WithError(err).Warn("lost connection to mqtt broker")
@@ -315,6 +316,20 @@ type MQTTUpdater struct {
 	logger                *logrus.Entry
 }
 
+// UpdateAll updates all mqtt data
+func (a *MQTTApi) UpdateAll() (err error) {
+	err = a.UpdatePrograms(a.config.Programs)
+	if err != nil {
+		return
+	}
+	err = a.UpdateSections(a.config.Sections)
+	if err != nil {
+		return
+	}
+	err = a.UpdateSectionRunner(&a.secRunner.State)
+	return
+}
+
 // UpdateSectionData updates the topic for the specified section
 func (a *MQTTApi) UpdateSectionData(index int, sec Section) (err error) {
 	bytes, err := json.Marshal(sec)
@@ -397,9 +412,9 @@ func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
 
 // UpdateSectionRunner updates the current section_runner state with the specified SRState
 func (a *MQTTApi) UpdateSectionRunner(state *SRState) (err error) {
-	state.Mu.Lock()
+	state.Lock()
 	data, err := state.ToJSON(a.config.Sections)
-	state.Mu.Unlock()
+	state.Unlock()
 	if err != nil {
 		return
 	}
@@ -506,9 +521,9 @@ func (u *MQTTUpdater) run() {
 			}
 		case srState := <-u.onSectionRunnerUpdate:
 			ExhaustChan(u.onSectionRunnerUpdate)
-			srState.Mu.Lock()
+			srState.Lock()
 			u.logger.WithField("srState", srState).Debugf("section runner update")
-			srState.Mu.Unlock()
+			srState.Unlock()
 
 			err := u.api.UpdateSectionRunner(srState)
 			if err != nil {
