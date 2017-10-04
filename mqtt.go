@@ -303,6 +303,30 @@ func (a *MQTTApi) subscribe() {
 		rData["message"] = fmt.Sprintf("cancelled section run with id %v", data.ID)
 		return
 	})
+
+	a.subscribeHandler("/section_runner/pause", func(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
+		var data struct{}
+		err = json.Unmarshal(message.Payload(), &data)
+		if err != nil {
+			err = fmt.Errorf("could not parse section_runner/pause request: %v", err)
+			return
+		}
+		a.secRunner.Pause()
+		rData["message"] = "paused section runner"
+		return
+	})
+
+	a.subscribeHandler("/section_runner/unpause", func(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
+		var data struct{}
+		err = json.Unmarshal(message.Payload(), &data)
+		if err != nil {
+			err = fmt.Errorf("could not parse section_runner/unpause request: %v", err)
+			return
+		}
+		a.secRunner.Unpause()
+		rData["message"] = "unpaused section runner"
+		return
+	})
 }
 
 // MQTTUpdater updates MQTT topics with the current state of the application

@@ -350,6 +350,8 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 					delay = time.After(remaining)
 					state.Current.PauseTime = nil
 					state.Current.Sec.SetState(true)
+				} else {
+					r.log.WithField("state", state).Debug("unpaused section runner")
 				}
 				state.Paused = false
 			}
