@@ -31,30 +31,30 @@
       "sequence": [
         {
           "section": 0,
-          "duration": 420.0
+          "duration": 420
         },
         {
           "section": 1,
-          "duration": 300.0
+          "duration": 300
         },
         {
           "section": 2,
-          "duration": 180.0
+          "duration": 180
         },
         {
           "section": 3,
-          "duration": 180.0
+          "duration": 180
         },
         {
           "section": 4,
-          "duration": 180.0
+          "duration": 180
         },
         {
           "section": 5,
-          "duration": 600.0
+          "duration": 600
         }
       ],
-      "sched": {
+      "schedule": {
         "times": [
           {
             "hour": 7,
@@ -111,7 +111,7 @@
           "duration": 0.5
         }
       ],
-      "sched": {
+      "schedule": {
         "times": [
           {
             "hour": 11,
@@ -129,8 +129,14 @@
           5,
           6
         ],
-        "from": null,
-        "to": null
+        "from": {
+          "day": 6,
+          "month": 10
+        },
+        "to": {
+          "day": 8,
+          "month": 10
+        }
       },
       "enabled": true
     }
