@@ -136,7 +136,7 @@ func NewProgram(name string, sequence []ProgItem, schedule sched.Schedule, enabl
 type ProgramJSON struct {
 	Name     *string           `json:"name"`
 	Sequence *ProgSequenceJSON `json:"sequence"`
-	Sched    *sched.Schedule   `json:"sched"`
+	Sched    *sched.Schedule   `json:"schedule"`
 	Enabled  *bool             `json:"enabled"`
 }
 
