@@ -80,7 +80,7 @@ func TestProgram_JSON(t *testing.T) {
 	 		"section": 1,
 	 		"duration": 0.024
 	 	}],
-	  	"sched": {
+	  	"schedule": {
 	  		"times": [{
 	  			"hour": 1, "minute": 2
 	  		}],
@@ -145,7 +145,7 @@ func TestPrograms_JSON(t *testing.T) {
 		"name": "p1", "sequence": []
 	}, {
 		"name": "p2", "sequence": [{"section": 0, "duration": 60.0}],
-		"sched": {},
+		"schedule": {},
 		"enabled": true
 	}
 	]`
