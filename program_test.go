@@ -384,7 +384,9 @@ func (s *ProgramSuite) TestProgram_Update() {
 		ProgItemJSON{1, 0.025},
 	}
 	newSched := makeSchedule()
-	err := prog.Update(NewProgramJSON("test2", newSeq, &newSched, true), []Section{s.sec1, s.sec2})
+	name := "test2"
+	running := true
+	err := prog.Update(NewProgramJSON(&name, &newSeq, &newSched, &running), []Section{s.sec1, s.sec2})
 	req.NoError(err)
 
 	ass.Equal("test2", prog.Name)
@@ -402,7 +404,7 @@ func (s *ProgramSuite) TestProgram_Update() {
 	s.sec2.AssertNumberOfCalls(s.T(), "SetState", 2)
 
 	newSeq[0].Section = 3
-	err = prog.Update(ProgramJSON{nil, &newSeq, nil, nil}, []Section{s.sec1, s.sec2})
+	err = prog.Update(NewProgramJSON(nil, &newSeq, nil, nil), []Section{s.sec1, s.sec2})
 	ass.Error(err)
 }
 

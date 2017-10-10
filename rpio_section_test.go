@@ -37,12 +37,12 @@ func TestRpioSection_JSON(t *testing.T) {
 
 	bytes, err := json.Marshal(&sec)
 	require.NoError(t, err)
-	ass.Equal(`{"name":"test1234","pin":4}`, string(bytes))
+	ass.Equal(`{"id":0,"name":"test1234","pin":4}`, string(bytes))
 
 	sec.SetState(true)
 	bytes, err = json.Marshal(&sec)
 	require.NoError(t, err)
-	ass.Equal(`{"name":"test1234","pin":4}`, string(bytes))
+	ass.Equal(`{"id":0,"name":"test1234","pin":4}`, string(bytes))
 }
 
 func TestRpioSections_JSON(t *testing.T) {

@@ -110,6 +110,7 @@ type ProgUpdate struct {
 // Program represents a sprinklers program, which runs on a schedule and contains
 // a sequence of sections to run.
 type Program struct {
+	ID		 int
 	Name     string
 	Sequence ProgSequence
 	Sched    sched.Schedule
@@ -125,7 +126,7 @@ type Program struct {
 func NewProgram(name string, sequence []ProgItem, schedule sched.Schedule, enabled bool) *Program {
 	runner := make(chan ProgRunnerMsg)
 	prog := &Program{
-		name, sequence, schedule, enabled,
+		0, name, sequence, schedule, enabled,
 		&sync.Mutex{}, NewAtomicBool(false), runner, nil,
 		Logger.WithField("program", name),
 	}
@@ -134,6 +135,7 @@ func NewProgram(name string, sequence []ProgItem, schedule sched.Schedule, enabl
 
 // ProgramJSON is the JSON representation of a Program
 type ProgramJSON struct {
+	ID		 int			   `json:"id"`
 	Name     *string           `json:"name"`
 	Sequence *ProgSequenceJSON `json:"sequence"`
 	Sched    *sched.Schedule   `json:"schedule"`
@@ -141,9 +143,9 @@ type ProgramJSON struct {
 }
 
 // NewProgramJSON creates a new ProgramJSON with the specified data
-func NewProgramJSON(name string, sequence ProgSequenceJSON, sched *sched.Schedule, enabled bool) ProgramJSON {
+func NewProgramJSON(name *string, sequence *ProgSequenceJSON, sched *sched.Schedule, enabled *bool) ProgramJSON {
 	return ProgramJSON{
-		&name, &sequence, sched, &enabled,
+		0, name, sequence, sched, enabled,
 	}
 }
 
@@ -170,6 +172,7 @@ func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
 	if p.Enabled != nil {
 		enabled = *p.Enabled
 	}
+	// id will be assigned later
 	prog = NewProgram(*p.Name, sequence, schedule, enabled)
 	return
 }
@@ -180,7 +183,7 @@ func (prog *Program) ToJSON(sections []Section) (data ProgramJSON, err error) {
 	if err != nil {
 		return
 	}
-	data = ProgramJSON{&prog.Name, &sequence, &prog.Sched, &prog.Enabled}
+	data = ProgramJSON{prog.ID, &prog.Name, &sequence, &prog.Sched, &prog.Enabled}
 	return
 }
 
@@ -358,6 +361,7 @@ func (progs ProgramsJSON) ToPrograms(sections []Section) (programs []Program, er
 		if err != nil {
 			return
 		}
+		p.ID = i
 		programs[i] = *p
 	}
 	return

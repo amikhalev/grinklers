@@ -49,6 +49,7 @@ func RpioSectionCleanup() (err error) {
 // unless rpi is set to false.
 type RpioSection struct {
 	name     string
+	id		 int
 	pin      rpio.Pin
 	onUpdate chan<- SecUpdate
 	log      *logrus.Entry
@@ -59,13 +60,14 @@ var _ Section = (*RpioSection)(nil)
 // NewRpioSection creates a new RpioSection with the specified data
 func NewRpioSection(name string, pin rpio.Pin) RpioSection {
 	return RpioSection{
-		name, pin,
+		name, 0, pin, // id will be assigned later
 		nil,
 		Logger.WithField("section", name),
 	}
 }
 
 type rpioSectionJSON struct {
+	ID   int 	  `json:"id"`
 	Name string   `json:"name"`
 	Pin  rpio.Pin `json:"pin"`
 }
@@ -82,7 +84,7 @@ func (sec *RpioSection) UnmarshalJSON(b []byte) (err error) {
 // MarshalJSON converts a RpioSection to JSON
 func (sec *RpioSection) MarshalJSON() ([]byte, error) {
 	d := rpioSectionJSON{
-		sec.name, sec.pin,
+		sec.id, sec.name, sec.pin,
 	}
 	return json.Marshal(&d)
 }
@@ -143,6 +145,7 @@ func (secs *RpioSections) UnmarshalJSON(b []byte) (err error) {
 	}
 	*secs = make(RpioSections, len(s))
 	for i := range s {
+		s[i].id = i
 		(*secs)[i] = &s[i]
 	}
 	return
