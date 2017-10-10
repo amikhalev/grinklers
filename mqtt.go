@@ -221,14 +221,14 @@ func (a *MQTTApi) getSection(secID *int) (section Section, err error) {
 
 func (a *MQTTApi) runProgram(message mqtt.Message, rData responseData) (err error) {
 	var data struct {
-		Program *int
+		ProgramID *int
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
 		err = fmt.Errorf("could not parse runProgram request: %v", err)
 		return
 	}
-	program, err := a.getProgram(data.Program)
+	program, err := a.getProgram(data.ProgramID)
 	if err != nil {
 		return
 	}
@@ -239,14 +239,14 @@ func (a *MQTTApi) runProgram(message mqtt.Message, rData responseData) (err erro
 
 func (a *MQTTApi) cancelProgram(message mqtt.Message, rData responseData) (err error) {
 	var data struct {
-		Program *int
+		ProgramID *int
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
 		err = fmt.Errorf("could not parse cancelProgram request: %v", err)
 		return
 	}
-	program, err := a.getProgram(data.Program)
+	program, err := a.getProgram(data.ProgramID)
 	if err != nil {
 		return
 	}
@@ -257,15 +257,15 @@ func (a *MQTTApi) cancelProgram(message mqtt.Message, rData responseData) (err e
 
 func (a *MQTTApi) updateProgram(message mqtt.Message, rData responseData) (err error) {
 	var data struct {
-		Program *int
-		Data    ProgramJSON
+		ProgramID *int
+		Data      ProgramJSON
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
 		err = fmt.Errorf("could not parse updateProgram request: %v", err)
 		return
 	}
-	program, err := a.getProgram(data.Program)
+	program, err := a.getProgram(data.ProgramID)
 	if err != nil {
 		return
 	}
@@ -284,15 +284,15 @@ func (a *MQTTApi) updateProgram(message mqtt.Message, rData responseData) (err e
 
 func (a *MQTTApi) runSection(message mqtt.Message, rData responseData) (err error) {
 	var data struct {
-		Section  *int
-		Duration float64
+		SectionID *int
+		Duration  float64
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
 		err = fmt.Errorf("could not parse runSection request: %v", err)
 		return
 	}
-	sec, err := a.getSection(data.Section)
+	sec, err := a.getSection(data.SectionID)
 	if err != nil {
 		return
 	}
@@ -305,14 +305,14 @@ func (a *MQTTApi) runSection(message mqtt.Message, rData responseData) (err erro
 
 func (a *MQTTApi) cancelSection(message mqtt.Message, rData responseData) (err error) {
 	var data struct {
-		Section *int
+		SectionID *int
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
 		err = fmt.Errorf("could not parse cancelSection request: %v", err)
 		return
 	}
-	sec, err := a.getSection(data.Section)
+	sec, err := a.getSection(data.SectionID)
 	if err != nil {
 		return
 	}
@@ -323,15 +323,15 @@ func (a *MQTTApi) cancelSection(message mqtt.Message, rData responseData) (err e
 
 func (a *MQTTApi) cancelSectionRunID(message mqtt.Message, rData responseData) (err error) {
 	var data struct {
-		ID *int32
+		RunID *int32
 	}
 	err = json.Unmarshal(message.Payload(), &data)
-	if err != nil || data.ID == nil {
+	if err != nil || data.RunID == nil {
 		err = fmt.Errorf("could not parse cancelSectionRunId request: %v", err)
 		return
 	}
-	a.secRunner.CancelID(*data.ID)
-	rData["message"] = fmt.Sprintf("cancelled section run with id %v", data.ID)
+	a.secRunner.CancelID(*data.RunID)
+	rData["message"] = fmt.Sprintf("cancelled section run with id %v", data.RunID)
 	return
 }
 
