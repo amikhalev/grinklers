@@ -110,7 +110,7 @@ type ProgUpdate struct {
 // Program represents a sprinklers program, which runs on a schedule and contains
 // a sequence of sections to run.
 type Program struct {
-	ID		 int
+	ID       int
 	Name     string
 	Sequence ProgSequence
 	Sched    sched.Schedule
@@ -135,15 +135,15 @@ func NewProgram(name string, sequence []ProgItem, schedule sched.Schedule, enabl
 
 // ProgramJSON is the JSON representation of a Program
 type ProgramJSON struct {
-	ID		 int			   `json:"id"`
-	Name     *string           `json:"name"`
-	Sequence *ProgSequenceJSON `json:"sequence"`
-	Sched    *sched.Schedule   `json:"schedule"`
-	Enabled  *bool             `json:"enabled"`
+	ID       int              `json:"id"`
+	Name     *string          `json:"name"`
+	Sequence ProgSequenceJSON `json:"sequence"`
+	Sched    *sched.Schedule  `json:"schedule"`
+	Enabled  *bool            `json:"enabled"`
 }
 
 // NewProgramJSON creates a new ProgramJSON with the specified data
-func NewProgramJSON(name *string, sequence *ProgSequenceJSON, sched *sched.Schedule, enabled *bool) ProgramJSON {
+func NewProgramJSON(name *string, sequence ProgSequenceJSON, sched *sched.Schedule, enabled *bool) ProgramJSON {
 	return ProgramJSON{
 		0, name, sequence, sched, enabled,
 	}
@@ -183,7 +183,7 @@ func (prog *Program) ToJSON(sections []Section) (data ProgramJSON, err error) {
 	if err != nil {
 		return
 	}
-	data = ProgramJSON{prog.ID, &prog.Name, &sequence, &prog.Sched, &prog.Enabled}
+	data = ProgramJSON{prog.ID, &prog.Name, sequence, &prog.Sched, &prog.Enabled}
 	return
 }
 
@@ -327,7 +327,9 @@ func (prog *Program) Running() bool {
 // the runner of any changes.
 func (prog *Program) Update(data ProgramJSON, sections []Section) (err error) {
 	prog.lock()
+	defer prog.unlock()
 	if data.Name != nil {
+		prog.log.WithField("name", *data.Name).Debug("updating program name")
 		prog.Name = *data.Name
 	}
 	if data.Sequence != nil {
@@ -335,15 +337,17 @@ func (prog *Program) Update(data ProgramJSON, sections []Section) (err error) {
 		if err != nil {
 			return err
 		}
+		prog.log.WithField("sequence", sequence).Debug("updating program sequence")
 		prog.Sequence = sequence
 	}
 	if data.Sched != nil {
+		prog.log.WithField("sched", *data.Sched).Debug("updating program sched")
 		prog.Sched = *data.Sched
 	}
 	if data.Enabled != nil {
+		prog.log.WithField("enabled", *data.Enabled).Debug("updating program enabled")
 		prog.Enabled = *data.Enabled
 	}
-	prog.unlock()
 	prog.refresh()
 	prog.onUpdate(pupdateData)
 	return

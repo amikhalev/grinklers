@@ -51,6 +51,9 @@ func NewSectionRun(runID int32, sec Section, duration time.Duration, doneChan ch
 }
 
 func (sr *SectionRun) String() string {
+	if sr == nil {
+		return "nil"
+	}
 	return fmt.Sprintf("{'%s' for %v}", sr.Sec.Name(), sr.Duration)
 }
 

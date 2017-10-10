@@ -272,6 +272,7 @@ func (a *MQTTApi) updateProgram(message mqtt.Message, rData responseData) (err e
 	err = program.Update(data.Data, a.config.Sections)
 	if err != nil {
 		err = fmt.Errorf("could not process program update: %v", err)
+		return
 	}
 	programJSON, err := program.ToJSON(a.config.Sections)
 	if err != nil {
