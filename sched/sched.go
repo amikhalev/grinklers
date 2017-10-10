@@ -2,7 +2,6 @@ package sched
 
 import (
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -136,7 +135,7 @@ func (sched *Schedule) NextRunAfterTime(timeReference time.Time) *time.Time {
 			}
 		}
 		if from.ToTime().After(timeReference) {
-			log.Printf("timeRef: %v, from: %v, to: %v", timeReference, from, to)
+			// log.Printf("timeRef: %v, from: %v, to: %v", timeReference, from, to)
 			timeReference = from.ToTime()
 		}
 	}
@@ -148,7 +147,7 @@ func (sched *Schedule) NextRunAfterTime(timeReference time.Time) *time.Time {
 				tim = tim.Add(weeks(1))
 			}
 			if to != nil && tim.After(to.ToTime()) {
-				log.Printf("rejecting %v because after to: %v", tim, to)
+				// log.Printf("rejecting %v because after to: %v", tim, to)
 				continue
 			}
 			if nextRunTime == nil || nextRunTime.After(tim) {

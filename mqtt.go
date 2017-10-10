@@ -8,15 +8,12 @@ import (
 	"strconv"
 	"time"
 
-	"strings"
-
 	"github.com/Sirupsen/logrus"
 	"github.com/eclipse/paho.mqtt.golang"
 )
 
-type respData map[string]interface{}
-
-type apiHandlerFunc func(client mqtt.Client, message mqtt.Message, rData respData) (err error)
+type responseData map[string]interface{}
+type requestHandler func(message mqtt.Message, rData responseData) (err error)
 
 // MQTTApi encapsulates all functionality exposed over MQTT
 type MQTTApi struct {
@@ -123,35 +120,37 @@ func (a *MQTTApi) updateConnected(connected bool) (err error) {
 	return
 }
 
-func (a *MQTTApi) subscribeHandler(path string, handler apiHandlerFunc) {
-	p := a.prefix + path
-	a.logger.WithField("path", p).Debug("registering handler")
-	a.client.Subscribe(p, 2, func(client mqtt.Client, message mqtt.Message) {
+func (a *MQTTApi) subscribe() {
+	reqPath := a.prefix + "/requests"
+	resPath := a.prefix + "/responses"
+	a.logger.WithField("path", reqPath).Debug("registering request handler")
+	a.client.Subscribe(reqPath, 2, func(client mqtt.Client, message mqtt.Message) {
 		var (
 			data struct {
-				Rid int `json:"rid"`
+				Rid  int    `json:"rid"`
+				Type string `json:"type"`
 			}
-			rData = make(respData)
+			rData = make(responseData)
 			err   error
 		)
 
-		rData["reqTopic"] = message.Topic()
-
 		defer func() {
-			if pan := recover(); pan != nil {
-				a.logger.WithField("panic", pan).Warn("panic in api responder")
-				err = fmt.Errorf("internal server panic: %v", pan)
-			}
-			topic := fmt.Sprintf("%s/responses/%d", a.prefix, data.Rid)
 			if err != nil {
 				a.logger.WithError(err).Info("error processing request")
+				rData["result"] = "error"
 				rData["error"] = err.Error()
 				if e, ok := err.(*json.SyntaxError); ok {
 					rData["offset"] = e.Offset
 				}
+			} else {
+				rData["result"] = "success"
 			}
-			resBytes, _ := json.Marshal(&rData)
-			client.Publish(topic, 1, false, resBytes)
+			resBytes, err := json.Marshal(&rData)
+			if err != nil {
+				a.logger.WithError(err).Error("error marshaling response")
+				return
+			}
+			client.Publish(resPath, 2, false, resBytes)
 		}()
 
 		err = json.Unmarshal(message.Payload(), &data)
@@ -160,7 +159,32 @@ func (a *MQTTApi) subscribeHandler(path string, handler apiHandlerFunc) {
 			return
 		}
 
-		err = handler(client, message, rData)
+		rData["rid"] = data.Rid
+		rData["type"] = data.Type
+
+		var handler requestHandler
+		switch data.Type {
+		case "runProgram":
+			handler = a.runProgram
+		case "cancelProgram":
+			handler = a.cancelProgram
+		case "updateProgram":
+			handler = a.updateProgram
+		case "runSection":
+			handler = a.runSection
+		case "cancelSection":
+			handler = a.cancelSection
+		case "cancelSectionRunId":
+			handler = a.cancelSectionRunID
+		case "pauseSectionRunner":
+			handler = a.pauseSectionRunner
+		}
+
+		if handler != nil {
+			err = handler(message, rData)
+		} else {
+			err = fmt.Errorf("invalid api request type: %s", data.Type)
+		}
 	})
 }
 
@@ -177,57 +201,34 @@ func parseDuration(durStr *string) (duration *time.Duration, err error) {
 	return
 }
 
-func (a *MQTTApi) parseProgramPath(path string) (program *Program, err error) {
-	parts := strings.Split(path, "/")
-	if len(parts) != 4 {
-		err = fmt.Errorf("invalid path: %s", path)
-		return
-	}
-	progStr := parts[2]
-	progID, err := strconv.Atoi(progStr)
+func (a *MQTTApi) getProgram(progID *int) (program *Program, err error) {
+	err = CheckRange(progID, "program ID", len(a.config.Programs))
 	if err != nil {
 		return
 	}
-	err = CheckRange(&progID, a.prefix+"/programs/id", len(a.config.Programs))
-	if err != nil {
-		return
-	}
-	program = &a.config.Programs[progID]
+	program = &a.config.Programs[*progID]
 	return
 }
 
-func (a *MQTTApi) parseSectionPath(path string) (section Section, err error) {
-	parts := strings.Split(path, "/")
-	if len(parts) != 4 {
-		err = fmt.Errorf("invalid path: %s", path)
-		return
-	}
-	secStr := parts[2]
-	secID, err := strconv.Atoi(secStr)
+func (a *MQTTApi) getSection(secID *int) (section Section, err error) {
+	err = CheckRange(secID, "section ID", len(a.config.Sections))
 	if err != nil {
 		return
 	}
-	err = CheckRange(&secID, a.prefix+"/sections/id", len(a.config.Sections))
-	if err != nil {
-		return
-	}
-	section = a.config.Sections[secID]
+	section = a.config.Sections[*secID]
 	return
 }
 
-func (a *MQTTApi) subscribe() {
-	a.subscribeHandler("/programs/+/run", a.runProgram)
-	a.subscribeHandler("/programs/+/cancel", a.cancelProgram)
-	a.subscribeHandler("/programs/+/update", a.updateProgram)
-	a.subscribeHandler("/sections/+/run", a.runSection)
-	a.subscribeHandler("/sections/+/cancel", a.cancelSection)
-	a.subscribeHandler("/section_runner/cancel_id", a.cancelSectionRunById)
-	a.subscribeHandler("/section_runner/pause", a.pauseSectionRunner)
-	a.subscribeHandler("/section_runner/unpause", a.unpauseSectionRunner)
-}
-
-func (a *MQTTApi) runProgram(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
-	program, err := a.parseProgramPath(message.Topic())
+func (a *MQTTApi) runProgram(message mqtt.Message, rData responseData) (err error) {
+	var data struct {
+		Program *int
+	}
+	err = json.Unmarshal(message.Payload(), &data)
+	if err != nil {
+		err = fmt.Errorf("could not parse runProgram request: %v", err)
+		return
+	}
+	program, err := a.getProgram(data.Program)
 	if err != nil {
 		return
 	}
@@ -236,8 +237,16 @@ func (a *MQTTApi) runProgram(client mqtt.Client, message mqtt.Message, rData res
 	return
 }
 
-func (a *MQTTApi) cancelProgram(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
-	program, err := a.parseProgramPath(message.Topic())
+func (a *MQTTApi) cancelProgram(message mqtt.Message, rData responseData) (err error) {
+	var data struct {
+		Program *int
+	}
+	err = json.Unmarshal(message.Payload(), &data)
+	if err != nil {
+		err = fmt.Errorf("could not parse cancelProgram request: %v", err)
+		return
+	}
+	program, err := a.getProgram(data.Program)
 	if err != nil {
 		return
 	}
@@ -246,18 +255,21 @@ func (a *MQTTApi) cancelProgram(client mqtt.Client, message mqtt.Message, rData 
 	return
 }
 
-func (a *MQTTApi) updateProgram(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
-	program, err := a.parseProgramPath(message.Topic())
-	if err != nil {
-		return
+func (a *MQTTApi) updateProgram(message mqtt.Message, rData responseData) (err error) {
+	var data struct {
+		Program *int
+		Data    ProgramJSON
 	}
-	var data ProgramJSON
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
-		err = fmt.Errorf("could not parse program update: %v", err)
+		err = fmt.Errorf("could not parse updateProgram request: %v", err)
 		return
 	}
-	err = program.Update(data, a.config.Sections)
+	program, err := a.getProgram(data.Program)
+	if err != nil {
+		return
+	}
+	err = program.Update(data.Data, a.config.Sections)
 	if err != nil {
 		err = fmt.Errorf("could not process program update: %v", err)
 	}
@@ -270,28 +282,37 @@ func (a *MQTTApi) updateProgram(client mqtt.Client, message mqtt.Message, rData 
 	return
 }
 
-func (a *MQTTApi) runSection(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
-	sec, err := a.parseSectionPath(message.Topic())
-	if err != nil {
-		return
-	}
+func (a *MQTTApi) runSection(message mqtt.Message, rData responseData) (err error) {
 	var data struct {
+		Section  *int
 		Duration float64
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
-		err = fmt.Errorf("could not parse run section request: %v", err)
+		err = fmt.Errorf("could not parse runSection request: %v", err)
+		return
+	}
+	sec, err := a.getSection(data.Section)
+	if err != nil {
 		return
 	}
 	duration := time.Duration(data.Duration * float64(time.Second))
 	id := a.secRunner.QueueSectionRun(sec, duration)
 	rData["message"] = fmt.Sprintf("running section '%s' for %v", sec.Name(), duration)
-	rData["new_id"] = id
+	rData["runId"] = id
 	return
 }
 
-func (a *MQTTApi) cancelSection(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
-	sec, err := a.parseSectionPath(message.Topic())
+func (a *MQTTApi) cancelSection(message mqtt.Message, rData responseData) (err error) {
+	var data struct {
+		Section *int
+	}
+	err = json.Unmarshal(message.Payload(), &data)
+	if err != nil {
+		err = fmt.Errorf("could not parse cancelSection request: %v", err)
+		return
+	}
+	sec, err := a.getSection(data.Section)
 	if err != nil {
 		return
 	}
@@ -300,41 +321,37 @@ func (a *MQTTApi) cancelSection(client mqtt.Client, message mqtt.Message, rData 
 	return
 }
 
-func (a *MQTTApi) cancelSectionRunById(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
+func (a *MQTTApi) cancelSectionRunID(message mqtt.Message, rData responseData) (err error) {
 	var data struct {
-		ID int32
+		ID *int32
 	}
 	err = json.Unmarshal(message.Payload(), &data)
-	if err != nil {
-		err = fmt.Errorf("could not parse section_runner/cancel_id request: %v", err)
+	if err != nil || data.ID == nil {
+		err = fmt.Errorf("could not parse cancelSectionRunId request: %v", err)
 		return
 	}
-	a.secRunner.CancelID(data.ID)
+	a.secRunner.CancelID(*data.ID)
 	rData["message"] = fmt.Sprintf("cancelled section run with id %v", data.ID)
 	return
 }
 
-func (a *MQTTApi) pauseSectionRunner(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
-	var data struct{}
+func (a *MQTTApi) pauseSectionRunner(message mqtt.Message, rData responseData) (err error) {
+	var data struct {
+		Paused *bool
+	}
 	err = json.Unmarshal(message.Payload(), &data)
-	if err != nil {
-		err = fmt.Errorf("could not parse section_runner/pause request: %v", err)
+	if err != nil || data.Paused == nil {
+		err = fmt.Errorf("could not parse pauseSectionRunner request: %v", err)
 		return
 	}
-	a.secRunner.Pause()
-	rData["message"] = "paused section runner"
-	return
-}
-
-func (a *MQTTApi) unpauseSectionRunner(client mqtt.Client, message mqtt.Message, rData respData) (err error) {
-	var data struct{}
-	err = json.Unmarshal(message.Payload(), &data)
-	if err != nil {
-		err = fmt.Errorf("could not parse section_runner/unpause request: %v", err)
-		return
+	rData["paused"] = data.Paused
+	if *data.Paused {
+		a.secRunner.Pause()
+		rData["message"] = "paused section runner"
+	} else {
+		a.secRunner.Unpause()
+		rData["message"] = "unpaused section runner"
 	}
-	a.secRunner.Unpause()
-	rData["message"] = "unpaused section runner"
 	return
 }
 
