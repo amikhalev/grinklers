@@ -339,6 +339,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 					"state": state,
 				}).Debug("paused section runner")
 			} else {
+				state.Paused = false
 				if state.Current != nil {
 					alreadyRunFor := (state.Current.PauseTime.Sub(*state.Current.StartTime))
 					remaining := state.Current.Duration - alreadyRunFor
@@ -351,9 +352,10 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 					state.Current.PauseTime = nil
 					state.Current.Sec.SetState(true)
 				} else {
+					state.Current = state.Queue.Pop()
+					runItem()
 					r.log.WithField("state", state).Debug("unpaused section runner")
 				}
-				state.Paused = false
 			}
 			endUpdate()
 		case <-delay:
