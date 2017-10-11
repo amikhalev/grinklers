@@ -97,7 +97,7 @@ func (seqj ProgSequenceJSON) ToSequence(sections []Section) (seq ProgSequence, e
 type ProgUpdateType int
 
 const (
-	pupdateData ProgUpdateType = iota
+	ProgUpdateData ProgUpdateType = iota
 	pupdateRunning
 )
 
@@ -346,7 +346,7 @@ func (prog *Program) Update(data ProgramJSON, sections []Section) (err error) {
 		prog.Enabled = *data.Enabled
 	}
 	prog.refresh()
-	prog.onUpdate(pupdateData)
+	prog.onUpdate(ProgUpdateData)
 	return
 }
 

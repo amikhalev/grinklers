@@ -61,8 +61,6 @@ func main() {
 	api.Start()
 
 	updater.Start(api)
-	updater.UpdateSections()
-	updater.UpdatePrograms()
 
 	<-sigc
 
