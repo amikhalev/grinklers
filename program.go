@@ -159,9 +159,6 @@ func (p *ProgramJSON) ToProgram(sections []Section) (prog *Program, err error) {
 	if err = CheckNotNil(p.Name, "name"); err != nil {
 		return
 	}
-	if err = CheckNotNil(p.Sequence, "sequence"); err != nil {
-		return
-	}
 	sequence, err = p.Sequence.ToSequence(sections)
 	if err != nil {
 		return

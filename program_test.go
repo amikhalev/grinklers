@@ -110,13 +110,13 @@ func TestProgram_JSON(t *testing.T) {
 	_, err = progJSON.ToProgram(sections)
 	ass.NoError(err)
 
-	*(progJSON.Sequence) = ProgSequenceJSON{ProgItemJSON{10, 0}}
+	progJSON.Sequence = ProgSequenceJSON{ProgItemJSON{10, 0}}
 	_, err = progJSON.ToProgram(sections)
 	ass.Error(err)
 
 	progJSON.Sequence = nil
 	_, err = progJSON.ToProgram(sections)
-	ass.Error(err)
+	ass.NoError(err) // nil is a valid slice
 
 	progJSON.Name = nil
 	_, err = progJSON.ToProgram(sections)
@@ -157,12 +157,12 @@ func TestPrograms_JSON(t *testing.T) {
 	req.Len(psj, 2)
 
 	ass.Equal("p1", *psj[0].Name)
-	ass.Len(*psj[0].Sequence, 0)
+	ass.Len(psj[0].Sequence, 0)
 
 	ass.Equal("p2", *psj[1].Name)
-	req.Len(*psj[1].Sequence, 1)
-	ass.Equal(0, (*psj[1].Sequence)[0].Section)
-	ass.Equal(60.0, (*psj[1].Sequence)[0].Duration)
+	req.Len(psj[1].Sequence, 1)
+	ass.Equal(0, (psj[1].Sequence)[0].Section)
+	ass.Equal(60.0, (psj[1].Sequence)[0].Duration)
 	ass.Equal(true, *psj[1].Enabled)
 
 	ps, err := psj.ToPrograms(sections)
@@ -179,7 +179,7 @@ func TestPrograms_JSON(t *testing.T) {
 	ass.Equal("1m0s", ps[1].Sequence[0].Duration.String())
 	ass.Equal(true, ps[1].Enabled)
 
-	(*psj[1].Sequence)[0].Section = 3
+	(psj[1].Sequence)[0].Section = 3
 	_, err = psj.ToPrograms(sections)
 	ass.Error(err)
 
@@ -189,12 +189,12 @@ func TestPrograms_JSON(t *testing.T) {
 	req.Len(psj, 2)
 
 	ass.Equal("p1", *psj[0].Name)
-	ass.Len(*psj[0].Sequence, 0)
+	ass.Len(psj[0].Sequence, 0)
 
 	ass.Equal("p2", *psj[1].Name)
-	req.Len(*psj[1].Sequence, 1)
-	ass.Equal(0, (*psj[1].Sequence)[0].Section)
-	ass.Equal(60.0, (*psj[1].Sequence)[0].Duration)
+	req.Len(psj[1].Sequence, 1)
+	ass.Equal(0, (psj[1].Sequence)[0].Section)
+	ass.Equal(60.0, (psj[1].Sequence)[0].Duration)
 	ass.Equal(true, *psj[1].Enabled)
 
 	ps[1].Sequence[0].Sec = &RpioSection{}
@@ -386,7 +386,7 @@ func (s *ProgramSuite) TestProgram_Update() {
 	newSched := makeSchedule()
 	name := "test2"
 	running := true
-	err := prog.Update(NewProgramJSON(&name, &newSeq, &newSched, &running), []Section{s.sec1, s.sec2})
+	err := prog.Update(NewProgramJSON(&name, newSeq, &newSched, &running), []Section{s.sec1, s.sec2})
 	req.NoError(err)
 
 	ass.Equal("test2", prog.Name)
@@ -404,7 +404,7 @@ func (s *ProgramSuite) TestProgram_Update() {
 	s.sec2.AssertNumberOfCalls(s.T(), "SetState", 2)
 
 	newSeq[0].Section = 3
-	err = prog.Update(NewProgramJSON(nil, &newSeq, nil, nil), []Section{s.sec1, s.sec2})
+	err = prog.Update(NewProgramJSON(nil, newSeq, nil, nil), []Section{s.sec1, s.sec2})
 	ass.Error(err)
 }
 
