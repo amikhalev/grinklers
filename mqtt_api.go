@@ -41,7 +41,9 @@ func (a *MQTTApi) createMQTTOpts(brokerURI *url.URL, cid string) (opts *mqtt.Cli
 		opts.SetUsername(username)
 		password, _ := brokerURI.User.Password()
 		opts.SetPassword(password)
-		a.logger.WithFields(logrus.Fields{"username": username, "password": password}).Debug("authenticating to mqtt server")
+		a.logger.WithFields(logrus.Fields{
+			"username": username, "password": password,
+		}).Debug("authenticating to mqtt server")
 	}
 	opts.SetClientID(cid)
 	return
