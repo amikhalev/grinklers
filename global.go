@@ -9,4 +9,7 @@ var Logger = logrus.New()
 
 func init() {
 	Logger.Level = logrus.DebugLevel
+	Logger.Formatter = &logrus.TextFormatter{
+		FullTimestamp: true,
+	}
 }
