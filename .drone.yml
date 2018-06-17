@@ -1,0 +1,6 @@
+pipeline:
+  build:
+    image: golang
+    command:
+      - make get-deps
+      - make all
