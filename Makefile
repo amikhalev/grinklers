@@ -48,7 +48,7 @@ $(CLIENT_BINARY): $(GO_SOURCES)
 
 .PHONY: get-deps
 get-deps: $(GO_SOURCES)
-	$(GO) get -u ./...
+	$(GO) get -t ./...
 
 .PHONY: run
 start: $(SERVER_BINARY)
