@@ -2,5 +2,5 @@ pipeline:
   build:
     image: golang
     commands:
-      - make get-deps
+      - go get ./...
       - make all

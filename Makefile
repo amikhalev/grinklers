@@ -48,7 +48,7 @@ $(CLIENT_BINARY): $(GO_SOURCES)
 
 .PHONY: get-deps
 get-deps: $(GO_SOURCES)
-	$(GO) get -t -u $(GO_PACKAGES)
+	$(GO) get -u ./...
 
 .PHONY: run
 start: $(SERVER_BINARY)
@@ -60,11 +60,11 @@ client: $(CLIENT_BINARY)
 
 .PHONY: vet
 vet: $(GO_SOURCES)
-	$(GO) vet $(GO_PACKAGES)
+	$(GO) vet ./...
 
 .PHONY: test
 test: $(GO_SOURCES) $(GO_TESTS)
-	$(GO) test $(TEST_FLAGS) $(GO_PACKAGES)
+	$(GO) test $(TEST_FLAGS) ./...
 
 $(COV_OUTPUTS): %: $(GO_SOURCES) $(GO_TESTS)
 	$(GO) test ./$(@D) $(TEST_FLAGS) -coverprofile=$@
