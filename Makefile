@@ -3,40 +3,39 @@ $(info using variables from .env file)
 include ./.env
 endif
 
-SERVER_PACKAGE    = ./server
-SERVER_BINARY     = ./grinklers
-CLIENT_PACKAGE    = ./client
-CLIENT_BINARY     = ./grinklers_client
+GO ?= go
 
-GO := go
+SERVER_PACKAGE   :=./server
+SERVER_BINARY    :=./grinklers
+CLIENT_PACKAGE   :=./client
+CLIENT_BINARY    :=./grinklers_client
 
-GO_PACKAGES      := $(shell go list ./...)
-GO_PACKAGE_PATHS := $(subst $(word 1,$(GO_PACKAGES)),./,$(GO_PACKAGES))
-GO_SOURCES       := $(shell find . -type f -name '*.go' -not -name '*_test.go')
-GO_TESTS         := $(shell find . -type f -name '*_test.go')
+GO_PACKAGES      :=$(shell go list ./...)
+GO_PACKAGE_PATHS :=$(subst $(word 1,$(GO_PACKAGES)),./,$(GO_PACKAGES))
+GO_SOURCES       :=$(shell find . -type f -name '*.go' -not -name '*_test.go')
+GO_TESTS         :=$(shell find . -type f -name '*_test.go')
 
-STATIC_FILES = config.example.json
+STATIC_FILES     :=config.example.json
 
-TEST_TIMEOUT = 10s
-TEST_FLAGS  :=-timeout $(TEST_TIMEOUT)
-COV_OUTPUT  := coverage.out
-COV_OUTPUTS := $(addsuffix /$(COV_OUTPUT),$(GO_PACKAGE_PATHS))
-COV_ALL     := ./coverage.all.out
-COV_HTML    := ./coverage.html
+TEST_TIMEOUT     ?=10s
+TEST_FLAGS       ?=-timeout $(TEST_TIMEOUT)
+COV_OUTPUTS      :=$(addsuffix /coverage.out,$(GO_PACKAGE_PATHS))
+COV_ALL          :=./coverage.all.out
+COV_HTML         :=./coverage.html
 
-DEPLOY_DIR    = ./rpi_deploy
-DEPLOY_BINARY = $(DEPLOY_DIR)/grinklers
-DEPLOY_ENV    = GOOS=linux GOARCH=arm GOARM=6
-DEPLOY_FILES  = $(addprefix $(DEPLOY_DIR)/,$(STATIC_FILES))
-DEPLOY_HOST  ?= alex@192.168.1.30
-DEPLOY_PATH  ?= /home/alex/grinklers
+DEPLOY_DIR       :=./rpi_deploy
+DEPLOY_BINARY    :=$(DEPLOY_DIR)/grinklers
+DEPLOY_FILES     :=$(addprefix $(DEPLOY_DIR)/,$(STATIC_FILES))
+DEPLOY_ENV       ?=GOOS=linux GOARCH=arm GOARM=6
+DEPLOY_HOST      ?=alex@192.168.1.30
+DEPLOY_PATH      ?=/home/alex/grinklers
 
-CLEAN_FILES = $(SERVER_BINARY) $(CLIENT_BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
+CLEAN_FILES      :=$(SERVER_BINARY) $(CLIENT_BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
 
-.PHONY: all clean deps run client test cover deploy
-
+.PHONY: all
 all: $(SERVER_BINARY) $(CLIENT_BINARY)
 
+.PHONY: clean
 clean:
 	$(GO) clean
 	rm -rf $(CLEAN_FILES)
@@ -47,15 +46,19 @@ $(SERVER_BINARY): $(GO_SOURCES)
 $(CLIENT_BINARY): $(GO_SOURCES)
 	$(GO) build -o $(CLIENT_BINARY) $(CLIENT_PACKAGE)
 
-deps: $(GO_SOURCES)
+.PHONY: deps
+get-deps: $(GO_SOURCES)
 	$(GO) get -t $(GO_PACKAGES)
 
-run: $(SERVER_BINARY)
+.PHONY: run
+start: $(SERVER_BINARY)
 	$(SERVER_BINARY)
 
+.PHONY: client
 client: $(CLIENT_BINARY)
 	$(CLIENT_BINARY)
 
+.PHONY: test
 test: $(GO_SOURCES) $(GO_TESTS)
 	$(GO) test $(TEST_FLAGS) $(GO_PACKAGES)
 
@@ -72,6 +75,7 @@ $(COV_HTML): $(COV_ALL)
 	@echo "generating $@"
 	@$(GO) tool cover -html=$(COV_ALL) -o $(COV_HTML)
 
+.PHONY: cover
 cover: $(COV_HTML)
 	@echo "coverage generated. open file://$(realpath $<) in your web browser to view"
 
@@ -84,6 +88,7 @@ $(DEPLOY_BINARY): $(GO_SOURCES) $(DEPLOY_DIR)
 $(DEPLOY_FILES): $(DEPLOY_DIR)/%: ./%
 	cp $< $@
 
+.PHONY: deploy
 deploy: $(DEPLOY_DIR) $(DEPLOY_BINARY) $(DEPLOY_FILES)
 	scp -r $(DEPLOY_DIR)/* $(DEPLOY_HOST):$(DEPLOY_PATH)/
 	@echo "deploy successfully completed"
