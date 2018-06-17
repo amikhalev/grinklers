@@ -33,7 +33,7 @@ DEPLOY_PATH      ?=/home/alex/grinklers
 CLEAN_FILES      :=$(SERVER_BINARY) $(CLIENT_BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
 
 .PHONY: all
-all: $(SERVER_BINARY) $(CLIENT_BINARY) vet test
+all: $(SERVER_BINARY) $(CLIENT_BINARY) vet test cover
 
 .PHONY: clean
 clean:
