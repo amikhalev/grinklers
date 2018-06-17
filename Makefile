@@ -46,9 +46,9 @@ $(SERVER_BINARY): $(GO_SOURCES)
 $(CLIENT_BINARY): $(GO_SOURCES)
 	$(GO) build -o $(CLIENT_BINARY) $(CLIENT_PACKAGE)
 
-.PHONY: deps
+.PHONY: get-deps
 get-deps: $(GO_SOURCES)
-	$(GO) get -t $(GO_PACKAGES)
+	$(GO) get -t -u $(GO_PACKAGES)
 
 .PHONY: run
 start: $(SERVER_BINARY)
