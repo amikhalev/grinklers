@@ -6,5 +6,5 @@ pipeline:
   build:
     image: golang:latest
     commands:
-      - go get ./...
+      - make get-deps
       - make all
