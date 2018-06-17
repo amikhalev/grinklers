@@ -10,6 +10,5 @@ before_install:
   - go get golang.org/x/tools/cmd/cover
 install: make get-deps
 script:
-  - make test
-  - make cover
+  - make all
   - $GOPATH/bin/goveralls -coverprofile=coverage.all.out -service=travis-ci
