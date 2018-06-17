@@ -33,7 +33,7 @@ DEPLOY_PATH      ?=/home/alex/grinklers
 CLEAN_FILES      :=$(SERVER_BINARY) $(CLIENT_BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
 
 .PHONY: all
-all: $(SERVER_BINARY) $(CLIENT_BINARY)
+all: $(SERVER_BINARY) $(CLIENT_BINARY) vet test
 
 .PHONY: clean
 clean:
@@ -57,6 +57,10 @@ start: $(SERVER_BINARY)
 .PHONY: client
 client: $(CLIENT_BINARY)
 	$(CLIENT_BINARY)
+
+.PHONY: vet
+vet: $(GO_SOURCES)
+	$(GO) vet $(GO_PACKAGES)
 
 .PHONY: test
 test: $(GO_SOURCES) $(GO_TESTS)
