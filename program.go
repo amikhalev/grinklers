@@ -215,13 +215,20 @@ func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
 	prog.lock()
 	seq := prog.Sequence
 	prog.unlock()
-	for _, item := range seq {
-		id, secDone := secRunner.RunSectionAsync(item.Sec, item.Duration)
+	seqLen := len(seq)
+	runIds := make([]int32, seqLen)
+	secDoneChans := make([]<-chan int, seqLen)
+	for i, item := range seq {
+		runIds[i], secDoneChans[i] = secRunner.RunSectionAsync(item.Sec, item.Duration)
+	}
+	for i := 0; i < seqLen; i++ {
 		select {
-		case <-secDone:
+		case <-secDoneChans[i]:
 			continue
 		case <-cancel:
-			secRunner.CancelID(id)
+			for j := seqLen - 1; j >= i; j-- {
+				secRunner.CancelID(runIds[j])
+			}
 			prog.log.Info("program run cancelled")
 			stop()
 			return
