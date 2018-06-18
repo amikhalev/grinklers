@@ -83,7 +83,7 @@ func (c *GrinklersClient) handleConnected(mqttC mqtt.Client, message mqtt.Messag
 func (c *GrinklersClient) handleNumSections(mqttC mqtt.Client, message mqtt.Message) {
 	i, err := strconv.Atoi(string(message.Payload()))
 	if err != nil {
-		log.Error("invalid number received: %v", err)
+		log.Errorf("invalid number received: %v", err)
 	} else {
 		c.chanNumSections <- i
 	}
