@@ -67,7 +67,7 @@ func TestSchedule_NextRunAfterTime(t *testing.T) {
 	req := require.New(t)
 	ass := assert.New(t)
 	schedule := Schedule{
-		Times:    []TimeOfDay{TimeOfDay{8, 30, 0, 0}, TimeOfDay{20, 0, 0, 0}},
+		Times:    []TimeOfDay{{8, 30, 0, 0}, {20, 0, 0, 0}},
 		Weekdays: []time.Weekday{time.Thursday, time.Friday},
 		From:     nil,
 		To:       nil,
@@ -83,7 +83,7 @@ func TestSchedule_NextRunAfterTime(t *testing.T) {
 	ass.Equal(time.Date(2016, 5, 20, 20, 0, 0, 0, time.Local), *tim)
 
 	schedule = Schedule{
-		Times:    []TimeOfDay{TimeOfDay{8, 30, 0, 0}, TimeOfDay{20, 0, 0, 0}},
+		Times:    []TimeOfDay{{8, 30, 0, 0}, {20, 0, 0, 0}},
 		Weekdays: []time.Weekday{time.Thursday, time.Friday},
 		From:     &Date{2016, 5, 30},
 		To:       &Date{2016, 6, 30},
@@ -105,7 +105,7 @@ func TestSchedule_NextRunAfterTime(t *testing.T) {
 	}
 
 	schedule = Schedule{
-		Times:    []TimeOfDay{TimeOfDay{8, 30, 0, 0}, TimeOfDay{20, 0, 0, 0}},
+		Times:    []TimeOfDay{{8, 30, 0, 0}, {20, 0, 0, 0}},
 		Weekdays: EveryDay,
 		From:     &Date{0, 12, 15},
 		To:       &Date{0, 1, 15},
@@ -129,7 +129,7 @@ func TestSchedule_NextRunAfterTime(t *testing.T) {
 func TestSchedule_NextRunTime(t *testing.T) {
 	ass := assert.New(t)
 	schedule := Schedule{
-		Times:    []TimeOfDay{TimeOfDay{8, 30, 0, 0}, TimeOfDay{20, 0, 0, 0}},
+		Times:    []TimeOfDay{{8, 30, 0, 0}, {20, 0, 0, 0}},
 		Weekdays: []time.Weekday{time.Thursday, time.Friday},
 		From:     nil,
 		To:       nil,

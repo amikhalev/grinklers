@@ -83,7 +83,7 @@ func (c *GrinklersClient) handleConnected(mqttC mqtt.Client, message mqtt.Messag
 func (c *GrinklersClient) handleNumSections(mqttC mqtt.Client, message mqtt.Message) {
 	i, err := strconv.Atoi(string(message.Payload()))
 	if err != nil {
-		log.Error("invalid number recieved: %v", err)
+		log.Error("invalid number received: %v", err)
 	} else {
 		c.chanNumSections <- i
 	}
@@ -98,7 +98,7 @@ func (c *GrinklersClient) handleSections(mqttC mqtt.Client, message mqtt.Message
 	sec := &Section{Id: idx}
 	err = json.Unmarshal(message.Payload(), sec)
 	if err != nil {
-		log.WithError(err).Error("error unmarshalling received section")
+		log.WithError(err).Error("error in received section")
 	} else {
 		c.chanSections <- *sec
 	}
@@ -168,7 +168,7 @@ func (c *GrinklersClient) GetSections() ([]Section, error) {
 		case newSec := <-c.chanSections:
 			log.WithFields(log.Fields{
 				"newSec": newSec,
-			}).Debug("recieved sec")
+			}).Debug("received sec")
 			isNew := true
 			for i, sec := range sections {
 				if sec.Id == newSec.Id {
@@ -258,7 +258,7 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("failed to retrieve number of sections")
 	}
-	log.WithField("numSections", numSections).Info("recieved number of sections")
+	log.WithField("numSections", numSections).Info("received number of sections")
 
 	log.Debug("requesting sections")
 	sections, err := client.GetSections()
@@ -268,5 +268,5 @@ func main() {
 	for _, section := range sections {
 		log.Info(section)
 	}
-	log.WithField("sections", sections).Info("recieved sections")
+	log.WithField("sections", sections).Info("received sections")
 }

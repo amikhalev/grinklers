@@ -362,7 +362,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			} else {
 				state.Paused = false
 				if state.Current != nil {
-					alreadyRunFor := (state.Current.PauseTime.Sub(*state.Current.StartTime))
+					alreadyRunFor := state.Current.PauseTime.Sub(*state.Current.StartTime)
 					remaining := state.Current.Duration - alreadyRunFor
 					r.log.WithFields(logrus.Fields{
 						"alreadyRunFor": alreadyRunFor,

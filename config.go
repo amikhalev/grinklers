@@ -42,7 +42,7 @@ func (j *ConfigDataJSON) ToConfigData() (c ConfigData, err error) {
 func findConfigFile() (configFile string) {
 	configFile = os.Getenv("CONFIG")
 	if configFile == "" {
-		dir, _ := os.Getwd() // filepath.Abs(filepath.Dir(os.Args[0]))
+		dir, _ := os.Getwd()
 		configFile = dir + "/config.json"
 	}
 	return

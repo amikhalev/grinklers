@@ -29,8 +29,8 @@ func (tod *TimeOfDay) Duration() time.Duration {
 		time.Duration(tod.Millisecond)*time.Millisecond
 }
 
-func (t *TimeOfDay) String() string {
-	return fmt.Sprintf("%02d:%02d:%02d:%04d", t.Hour, t.Minute, t.Second, t.Millisecond)
+func (tod *TimeOfDay) String() string {
+	return fmt.Sprintf("%02d:%02d:%02d:%04d", tod.Hour, tod.Minute, tod.Second, tod.Millisecond)
 }
 
 type Date struct {
@@ -58,14 +58,14 @@ func (d *Date) WithResolvedYear(refTime time.Time) Date {
 	return *d
 }
 
-func (d1 *Date) After(d2 *Date) bool {
-	if d1.Year > d2.Year {
+func (d *Date) After(d2 *Date) bool {
+	if d.Year > d2.Year {
 		return true
-	} else if d1.Year == d2.Year {
-		if d1.Month > d2.Month {
+	} else if d.Year == d2.Year {
+		if d.Month > d2.Month {
 			return true
-		} else if d1.Month == d2.Month {
-			if d1.Day > d2.Day {
+		} else if d.Month == d2.Month {
+			if d.Day > d2.Day {
 				return true
 			}
 		}
@@ -73,10 +73,10 @@ func (d1 *Date) After(d2 *Date) bool {
 	return false
 }
 
-func (date1 *Date) Before(date2 *Date) bool {
-	if *date1 == *date2 {
+func (d *Date) Before(d2 *Date) bool {
+	if *d == *d2 {
 		return false
-	} else if date1.After(date2) {
+	} else if d.After(d2) {
 		return false
 	} else {
 		return true

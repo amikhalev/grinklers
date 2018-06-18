@@ -21,7 +21,7 @@ func makeSchedule() Schedule {
 	runTime := time.Now().Add(10 * time.Millisecond)
 	return Schedule{
 		Times: []TimeOfDay{
-			TimeOfDay{Hour: runTime.Hour(), Minute: runTime.Minute(), Second: runTime.Second(), Millisecond: runTime.Nanosecond() / 1000000},
+			{Hour: runTime.Hour(), Minute: runTime.Minute(), Second: runTime.Second(), Millisecond: runTime.Nanosecond() / 1000000},
 		},
 		Weekdays: EveryDay,
 	}
@@ -241,8 +241,8 @@ func (s *ProgramSuite) TestProgram_Run() {
 	onUpdate := make(chan ProgUpdate, 10)
 
 	prog := NewProgram("test_run", []ProgItem{
-		ProgItem{s.sec1, 10 * time.Millisecond},
-		ProgItem{s.sec2, 10 * time.Millisecond},
+		{s.sec1, 10 * time.Millisecond},
+		{s.sec2, 10 * time.Millisecond},
 	}, Schedule{}, false)
 	prog.OnUpdate = onUpdate
 	prog.Start(secRunner, s.waitGroup)
@@ -286,8 +286,8 @@ func (s *ProgramSuite) TestProgram_Schedule() {
 	s.SetupSecs()
 
 	prog := NewProgram("test_schedule", []ProgItem{
-		ProgItem{s.sec1, 25 * time.Millisecond},
-		ProgItem{s.sec2, 25 * time.Millisecond},
+		{s.sec1, 25 * time.Millisecond},
+		{s.sec2, 25 * time.Millisecond},
 	}, makeSchedule(), true)
 	prog.Start(secRunner, s.waitGroup)
 
@@ -304,8 +304,8 @@ func (s *ProgramSuite) TestProgram_OnUpdate() {
 	s.SetupSecs()
 
 	prog := NewProgram("test_onupdate", []ProgItem{
-		ProgItem{s.sec1, 25 * time.Millisecond},
-		ProgItem{s.sec2, 25 * time.Millisecond},
+		{s.sec1, 25 * time.Millisecond},
+		{s.sec2, 25 * time.Millisecond},
 	}, makeSchedule(), true)
 	prog.Start(secRunner, s.waitGroup)
 
@@ -322,8 +322,8 @@ func (s *ProgramSuite) TestProgram_DoubleRun() {
 	s.SetupSecs()
 
 	prog := NewProgram("test_doublerun", []ProgItem{
-		ProgItem{s.sec1, 25 * time.Millisecond},
-		ProgItem{s.sec2, 25 * time.Millisecond},
+		{s.sec1, 25 * time.Millisecond},
+		{s.sec2, 25 * time.Millisecond},
 	}, Schedule{}, false)
 	prog.Start(secRunner, s.waitGroup)
 
@@ -345,8 +345,8 @@ func (s *ProgramSuite) TestProgram_Cancel() {
 	s.SetupSecs()
 
 	prog := NewProgram("test_cancel", []ProgItem{
-		ProgItem{s.sec1, 25 * time.Millisecond},
-		ProgItem{s.sec2, 25 * time.Millisecond},
+		{s.sec1, 25 * time.Millisecond},
+		{s.sec2, 25 * time.Millisecond},
 	}, Schedule{}, false)
 	prog.Start(secRunner, nil)
 
@@ -369,8 +369,8 @@ func (s *ProgramSuite) TestProgram_SectionCancelled() {
 	s.SetupSecs()
 
 	prog := NewProgram("test_section_cancelled", []ProgItem{
-		ProgItem{s.sec1, 25 * time.Millisecond},
-		ProgItem{s.sec2, 25 * time.Millisecond},
+		{s.sec1, 25 * time.Millisecond},
+		{s.sec2, 25 * time.Millisecond},
 	}, Schedule{}, false)
 	prog.Start(secRunner, nil)
 
@@ -396,7 +396,7 @@ func (s *ProgramSuite) TestProgram_Update() {
 	s.SetupSecs()
 
 	prog := NewProgram("test_update", []ProgItem{
-		ProgItem{s.sec1, 25 * time.Millisecond},
+		{s.sec1, 25 * time.Millisecond},
 	}, makeSchedule(), false)
 
 	prog.Start(secRunner, nil)

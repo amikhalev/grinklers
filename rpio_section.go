@@ -18,7 +18,7 @@ var (
 // This reads the "RPI" environment variable to determine if raspi sections should be used. If this environment
 // variable is false, mock sections which do not actually use io pins are used.
 func RpioSectionInit() (err error) {
-	rpi = (os.Getenv("RPI") == "true")
+	rpi = os.Getenv("RPI") == "true"
 	if rpi {
 		Logger.Info("opening rpio")
 		err = rpio.Open()
