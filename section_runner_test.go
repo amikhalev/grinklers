@@ -159,11 +159,11 @@ func (s *SRQueueSuite) TestRemove() {
 	queue.Push(&item3)
 	ass.Equal(3, queue.Len(), "Len() does not match")
 
-	queue.RemoveMatchingSection(s.sec2)
+	queue.RemoveWithSection(s.sec2)
 	ass.Equal(2, queue.Len(), "Len() does not match")
-	queue.RemoveMatchingSection(s.sec1)
+	queue.RemoveWithSection(s.sec1)
 	ass.Equal(1, queue.Len(), "Len() does not match")
-	ass.Equal(&item3, queue.Pop(), "item3 is not 3 out of queue")
+	ass.Equal(&item3, queue.Pop(), "item3 is not 3rd out of queue")
 	ass.Equal(0, queue.Len(), "Len() does not match")
 }
 
@@ -244,7 +244,7 @@ func (s *SectionRunnerSuite) TestRunAsync() {
 	_, c := s.sr.RunSectionAsync(s.sec1, 50*time.Millisecond)
 	time.Sleep(25 * time.Millisecond)
 	s.sec1.AssertRunning()
-	
+
 	s.sr.State.Lock()
 	json, err := s.sr.State.ToJSON(s.secs)
 	s.sr.State.Unlock()
@@ -390,7 +390,7 @@ func (s *SectionRunnerSuite) TestPause() {
 	time.Sleep(10 * time.Millisecond)
 	s.ass.False(s.sr.State.Paused, "SectionRunner should not be paused")
 	s.ass.True(s.sec1.State(), "Section should be running")
-	
+
 	json, _ = s.sr.State.ToJSON(s.secs)
 	s.ass.False(json.Paused)
 	s.ass.Equal(0, json.Current.Section)

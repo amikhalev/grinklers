@@ -34,8 +34,9 @@ type SectionRun struct {
 	Sec Section
 	// Duration is the duration the section is run for
 	Duration time.Duration
-	// Done is a chan that a value is sent on when the section is done running
-	Done chan<- int
+	// Done is a chan that a value is sent on when the section is done running. This value is true
+	// if the section run was cancelled, and false if it finished normally
+	Done chan<- bool
 	// StartTime is the time the section started running, or nil if the section is still queued
 	StartTime *time.Time
 	// PauseTime is the time the section was paused, if the SectionRunner is currently paused. Otherwise
@@ -44,7 +45,7 @@ type SectionRun struct {
 }
 
 // NewSectionRun creates a new SectionRun
-func NewSectionRun(runID int32, sec Section, duration time.Duration, doneChan chan<- int) SectionRun {
+func NewSectionRun(runID int32, sec Section, duration time.Duration, doneChan chan<- bool) SectionRun {
 	return SectionRun{
 		runID, sec, duration, doneChan, nil, nil,
 	}
@@ -166,10 +167,12 @@ func (q *SRQueue) Len() int {
 	return count
 }
 
-// RemoveMatchingSection removes all items from the queue that are runs with the specified section
-func (q *SRQueue) RemoveMatchingSection(sec Section) {
+// RemoveWithSection removes all items from the queue that are runs with the specified section
+func (q *SRQueue) RemoveWithSection(sec Section) (removed []*SectionRun) {
+	removed = make([]*SectionRun, 0)
 	checkAndRemove := func(i int) {
 		if q.items[i] != nil && q.items[i].Sec == sec {
+			removed = append(removed, q.items[i])
 			q.items[i] = nil
 		}
 	}
@@ -177,6 +180,7 @@ func (q *SRQueue) RemoveMatchingSection(sec Section) {
 		checkAndRemove(i)
 	}
 	checkAndRemove(q.tail)
+	return
 }
 
 // RemoveByID removes the SectionRun with the specified id and returns it, or returns nil if none existed
@@ -275,13 +279,19 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			delay = time.After(state.Current.Duration)
 		}
 	}
-	finishRun := func() {
+	finishRun := func(cancelled bool) {
 		state.Current.Sec.SetState(false)
 		delay = nil
 		if state.Current.Done != nil {
-			state.Current.Done <- state.Queue.Len()
+			state.Current.Done <- cancelled
 		}
-		r.log.WithField("state", state).Info("finished running section")
+		var verb string
+		if cancelled {
+			verb = "cancelled"
+		} else {
+			verb = "finished"
+		}
+		r.log.WithField("state", state).Infof("%s running section", verb)
 		state.Current = state.Queue.Pop()
 	}
 	if wait != nil {
@@ -304,9 +314,14 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			endUpdate()
 		case sec := <-r.cancelSec:
 			state.Lock()
-			state.Queue.RemoveMatchingSection(sec)
+			fromQueue := state.Queue.RemoveWithSection(sec)
+			for _, secRun := range fromQueue {
+				if secRun.Done != nil {
+					secRun.Done <- true
+				}
+			}
 			if state.Current != nil && state.Current.Sec == sec {
-				finishRun()
+				finishRun(true)
 				runItem()
 			}
 			r.log.WithFields(logrus.Fields{
@@ -315,9 +330,12 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			endUpdate()
 		case id := <-r.cancelID:
 			state.Lock()
-			state.Queue.RemoveByID(id)
+			fromQueue := state.Queue.RemoveByID(id)
+			if fromQueue != nil && fromQueue.Done != nil {
+				fromQueue.Done <- true
+			}
 			if state.Current != nil && state.Current.RunID == id {
-				finishRun()
+				finishRun(true)
 				runItem()
 			}
 			r.log.WithFields(logrus.Fields{
@@ -363,7 +381,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			endUpdate()
 		case <-delay:
 			state.Lock()
-			finishRun()
+			finishRun(false)
 			runItem()
 			endUpdate()
 		}
@@ -401,9 +419,9 @@ func (r *SectionRunner) QueueSectionRun(sec Section, dur time.Duration) (id int3
 }
 
 // RunSectionAsync runs the section and returns a chan which recieves when the section is finished running
-func (r *SectionRunner) RunSectionAsync(sec Section, dur time.Duration) (id int32, done <-chan int) {
+func (r *SectionRunner) RunSectionAsync(sec Section, dur time.Duration) (id int32, done <-chan bool) {
 	id = r.getNextID()
-	doneChan := make(chan int, 1)
+	doneChan := make(chan bool, 1)
 	r.run <- NewSectionRun(id, sec, dur, doneChan)
 	done = doneChan
 	return

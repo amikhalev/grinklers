@@ -217,7 +217,7 @@ func (prog *Program) run(cancel <-chan int, secRunner *SectionRunner) {
 	prog.unlock()
 	seqLen := len(seq)
 	runIds := make([]int32, seqLen)
-	secDoneChans := make([]<-chan int, seqLen)
+	secDoneChans := make([]<-chan bool, seqLen)
 	for i, item := range seq {
 		runIds[i], secDoneChans[i] = secRunner.RunSectionAsync(item.Sec, item.Duration)
 	}

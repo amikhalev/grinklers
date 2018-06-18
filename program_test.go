@@ -364,6 +364,33 @@ func (s *ProgramSuite) TestProgram_Cancel() {
 	s.sec2.AssertNumberOfCalls(s.T(), "SetState", 0)
 }
 
+func (s *ProgramSuite) TestProgram_SectionCancelled() {
+	ass, secRunner := s.ass, s.secRunner
+	s.SetupSecs()
+
+	prog := NewProgram("test_section_cancelled", []ProgItem{
+		ProgItem{s.sec1, 25 * time.Millisecond},
+		ProgItem{s.sec2, 25 * time.Millisecond},
+	}, Schedule{}, false)
+	prog.Start(secRunner, nil)
+
+	prog.Run()
+	time.Sleep(15 * time.Millisecond)
+	ass.Equal(true, prog.Running())
+	s.secRunner.CancelSection(s.sec2)
+	time.Sleep(15 * time.Millisecond)
+	secRunner.State.Lock()
+	ass.Nil(secRunner.State.Current)
+	ass.Equal(secRunner.State.Queue.Len(), 0)
+	secRunner.State.Unlock()
+	ass.Equal(false, prog.Running())
+
+	prog.Quit()
+
+	s.sec1.AssertNumberOfCalls(s.T(), "SetState", 2)
+	s.sec2.AssertNumberOfCalls(s.T(), "SetState", 0)
+}
+
 func (s *ProgramSuite) TestProgram_Update() {
 	ass, req, secRunner := s.ass, s.req, s.secRunner
 	s.SetupSecs()
