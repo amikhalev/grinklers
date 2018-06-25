@@ -37,7 +37,7 @@ func (e *MQTTError) Error() string {
 var _ error = &MQTTError{}
 
 func NewNotSpecifiedError(name string) error {
-	return &MQTTError{EC_NotSpecified, fmt.Sprintf("%s not specified"), name, nil}
+	return &MQTTError{EC_NotSpecified, fmt.Sprintf("%s not specified", name), name, nil}
 }
 
 func NewParseError(parseType string, cause error) error {
@@ -73,11 +73,9 @@ func CheckRange(ref *int, name string, max int) (err error) {
 	var message string = ""
 	if *ref < 0 {
 		message = fmt.Sprintf("%s out of range: %d < 0", name, *ref)
-		return
 	}
 	if *ref >= max {
 		message = fmt.Sprintf("%s out of range: %d >= %d", name, *ref, max)
-		return
 	}
 	if message != "" {
 		err = &MQTTError{EC_Range, message, name, nil}
