@@ -251,14 +251,16 @@ func (a *MQTTApi) subscribe() {
 				merr *MQTTError
 				ok bool
 			)
-			if merr, ok = err.(*MQTTError); !ok {
-				merr = NewInternalError(err)
+			if err != nil {
+				if merr, ok = err.(*MQTTError); !ok {
+					merr = NewInternalError(err)
+				}
 			}
 			if merr != nil {
 				a.logger.WithError(merr).Info("error processing request")
 				rData["result"] = "error"
 				rData["code"] = merr.Code
-				rData["message"] = merr.Message
+				rData["message"] = merr.Error()
 				if merr.Name != "" {
 					rData["name"] = merr.Name
 				}

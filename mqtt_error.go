@@ -28,6 +28,9 @@ func NewMQTTError(code ErrorCode, message string) *MQTTError {
 }
 
 func (e *MQTTError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
+	}
 	return e.Message
 }
 
