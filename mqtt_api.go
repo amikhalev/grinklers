@@ -361,7 +361,7 @@ func (a *MQTTApi) runProgram(message mqtt.Message, rData responseData) (err erro
 		return
 	}
 	program.Run()
-	rData["Message"] = fmt.Sprintf("running program '%s'", program.Name)
+	rData["message"] = fmt.Sprintf("running program '%s'", program.Name)
 	return
 }
 
@@ -379,7 +379,7 @@ func (a *MQTTApi) cancelProgram(message mqtt.Message, rData responseData) (err e
 		return
 	}
 	program.Cancel()
-	rData["Message"] = fmt.Sprintf("cancelled program '%s'", program.Name)
+	rData["message"] = fmt.Sprintf("cancelled program '%s'", program.Name)
 	return
 }
 
@@ -406,7 +406,7 @@ func (a *MQTTApi) updateProgram(message mqtt.Message, rData responseData) (err e
 	if err != nil {
 		return
 	}
-	rData["Message"] = fmt.Sprintf("updated program '%s'", program.Name)
+	rData["message"] = fmt.Sprintf("updated program '%s'", program.Name)
 	rData["data"] = programJSON
 	return
 }
@@ -427,7 +427,7 @@ func (a *MQTTApi) runSection(message mqtt.Message, rData responseData) (err erro
 	}
 	duration := time.Duration(data.Duration * float64(time.Second))
 	id := a.secRunner.QueueSectionRun(sec, duration)
-	rData["Message"] = fmt.Sprintf("running section '%s' for %v", sec.Name(), duration)
+	rData["message"] = fmt.Sprintf("running section '%s' for %v", sec.Name(), duration)
 	rData["runId"] = id
 	return
 }
@@ -446,7 +446,7 @@ func (a *MQTTApi) cancelSection(message mqtt.Message, rData responseData) (err e
 		return
 	}
 	a.secRunner.CancelSection(sec)
-	rData["Message"] = fmt.Sprintf("cancelled section '%s'", sec.Name())
+	rData["message"] = fmt.Sprintf("cancelled section '%s'", sec.Name())
 	return
 }
 
@@ -460,7 +460,7 @@ func (a *MQTTApi) cancelSectionRunID(message mqtt.Message, rData responseData) (
 		return
 	}
 	a.secRunner.CancelID(*data.RunID)
-	rData["Message"] = fmt.Sprintf("cancelled section run with id %v", data.RunID)
+	rData["message"] = fmt.Sprintf("cancelled section run with id %v", data.RunID)
 	return
 }
 
@@ -476,10 +476,10 @@ func (a *MQTTApi) pauseSectionRunner(message mqtt.Message, rData responseData) (
 	rData["paused"] = data.Paused
 	if *data.Paused {
 		a.secRunner.Pause()
-		rData["Message"] = "paused section runner"
+		rData["message"] = "paused section runner"
 	} else {
 		a.secRunner.Unpause()
-		rData["Message"] = "unpaused section runner"
+		rData["message"] = "unpaused section runner"
 	}
 	return
 }
