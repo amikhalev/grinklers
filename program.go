@@ -49,7 +49,7 @@ func (pi *ProgItem) ToJSON(sections []Section) (data *ProgItemJSON, err error) {
 	return
 }
 
-// ProgRunnerMsg represents a message sent to a ProgRunner to tell it what to do
+// ProgRunnerMsg represents a Message sent to a ProgRunner to tell it what to do
 type ProgRunnerMsg int
 
 const (
