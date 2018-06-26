@@ -10,6 +10,8 @@ import (
 	"github.com/Sirupsen/logrus"
 )
 
+const SR_ID_ALL = -1;
+
 // SectionRunJSON is the JSON representation of a SectionRun
 type SectionRunJSON struct {
 	ID        int32      `json:"id"`
@@ -195,6 +197,22 @@ func (q *SRQueue) RemoveByID(id int32) *SectionRun {
 	return nil
 }
 
+// RemoveAll removes all section from the queue and returns them
+func (q SRQueue) RemoveAll() (removed []*SectionRun) {
+	removed = make([]*SectionRun, 0)
+	checkAndRemove := func(i int) {
+		if q.items[i] != nil {
+			removed = append(removed, q.items[i])
+			q.items[i] = nil
+		}
+	}
+	for i := q.head; i != q.tail; i = (i + 1) % len(q.items) {
+		checkAndRemove(i)
+	}
+	checkAndRemove(q.tail)
+	return
+}
+
 // SRState is the state of the SectionRunner. All accesses synchronized over Mu
 type SRState struct {
 	Queue      SRQueue
@@ -330,17 +348,33 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			endUpdate()
 		case id := <-r.cancelID:
 			state.Lock()
-			fromQueue := state.Queue.RemoveByID(id)
-			if fromQueue != nil && fromQueue.Done != nil {
-				fromQueue.Done <- true
+			if id == SR_ID_ALL {
+				fromQueue := state.Queue.RemoveAll()
+				for _, secRun := range fromQueue {
+					if secRun.Done != nil {
+						secRun.Done <- true
+					}
+				}
+				if state.Current != nil {
+					finishRun(true)
+					runItem()
+				}
+				r.log.WithFields(logrus.Fields{
+					"state": state,
+				}).Debug("cancelled all section runs")
+			} else {
+				fromQueue := state.Queue.RemoveByID(id)
+				if fromQueue != nil && fromQueue.Done != nil {
+					fromQueue.Done <- true
+				}
+				if state.Current != nil && state.Current.RunID == id {
+					finishRun(true)
+					runItem()
+				}
+				r.log.WithFields(logrus.Fields{
+					"state": state, "id": id,
+				}).Debug("cancelled section run by id")
 			}
-			if state.Current != nil && state.Current.RunID == id {
-				finishRun(true)
-				runItem()
-			}
-			r.log.WithFields(logrus.Fields{
-				"state": state, "id": id,
-			}).Debug("cancelled section run by id")
 			endUpdate()
 		case paused := <-r.paused:
 			state.Lock()
@@ -441,6 +475,11 @@ func (r *SectionRunner) CancelSection(sec Section) {
 // CancelID cancels the section run with the specified id
 func (r *SectionRunner) CancelID(id int32) {
 	r.cancelID <- id
+}
+
+// CancelAll cancels all section runs
+func (r *SectionRunner) CancelAll() {
+	r.cancelID <- SR_ID_ALL
 }
 
 // Pause pauses the currently running section run (if any) and stops processing the section run queue

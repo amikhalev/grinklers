@@ -167,6 +167,26 @@ func (s *SRQueueSuite) TestRemove() {
 	ass.Equal(0, queue.Len(), "Len() does not match")
 }
 
+func (s *SRQueueSuite) TestRemoveAll() {
+	ass := s.a
+	queue := s.queue
+
+	item1 := NewSectionRun(0, s.sec1, 5*time.Second, nil)
+	item2 := NewSectionRun(0, s.sec2, 10*time.Second, nil)
+	item3 := NewSectionRun(0, s.sec3, 15*time.Second, nil)
+
+	queue.Push(&item1)
+	queue.Push(&item2)
+	queue.Push(&item3)
+	ass.Equal(3, queue.Len(), "Len() does not match")
+
+	removed := queue.RemoveAll()
+	ass.Equal(0, queue.Len(), "Len() does not match")
+	ass.Contains(removed, &item1)
+	ass.Contains(removed, &item2)
+	ass.Contains(removed, &item3)
+}
+
 func TestSRQueue(t *testing.T) {
 	suite.Run(t, new(SRQueueSuite))
 }
@@ -350,6 +370,26 @@ func (s *SectionRunnerSuite) TestCancelID() {
 
 	s.sec1.AssertAllCalled()
 	s.sec2.AssertAllCalled()
+}
+
+func (s *SectionRunnerSuite) TestCancelAll() {
+	s.sec1.SetupReturns()
+	s.sec2.SetupReturns()
+
+	s.sr.QueueSectionRun(s.sec1, time.Minute)
+	s.sr.QueueSectionRun(s.sec2, time.Minute)
+
+	time.Sleep(10 * time.Millisecond)
+	s.sec2.AssertNotRunning()
+	s.sec1.AssertRunning()
+
+	s.sr.CancelAll()
+	time.Sleep(10 * time.Millisecond)
+	json, _ := s.sr.State.ToJSON(s.secs)
+	s.ass.Empty(json.Queue, "There should be 0 items in the queue")
+	s.ass.Nil(json.Current)
+	s.sec2.AssertNotRunning()
+	s.sec1.AssertNotRunning()
 }
 
 func (s *SectionRunnerSuite) TestPause() {
