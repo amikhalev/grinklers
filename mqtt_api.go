@@ -304,6 +304,8 @@ func (a *MQTTApi) subscribe() {
 			handler = a.cancelSection
 		case "cancelSectionRunId":
 			handler = a.cancelSectionRunID
+		case "cancelAllSectionRuns":
+			handler = a.cancelAllSectionRuns
 		case "pauseSectionRunner":
 			handler = a.pauseSectionRunner
 		}
@@ -461,6 +463,18 @@ func (a *MQTTApi) cancelSectionRunID(message mqtt.Message, rData responseData) (
 	}
 	a.secRunner.CancelID(*data.RunID)
 	rData["message"] = fmt.Sprintf("cancelled section run with id %v", data.RunID)
+	return
+}
+
+func (a *MQTTApi) cancelAllSectionRuns(message mqtt.Message, rData responseData) (err error) {
+	var data struct {}
+	err = json.Unmarshal(message.Payload(), &data)
+	if err != nil {
+		err = NewParseError("cancelAllSectionRuns request", err)
+		return
+	}
+	a.secRunner.CancelAll()
+	rData["message"] = "cancelled all section runs"
 	return
 }
 
