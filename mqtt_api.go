@@ -12,6 +12,9 @@ import (
 	"github.com/eclipse/paho.mqtt.golang"
 )
 
+const CONNECT_RETRY_TIMEOUT = 10 * time.Second
+const MQTT_TIMEOUT = 10 * time.Second
+
 type responseData map[string]interface{}
 type requestHandler func(message mqtt.Message, rData responseData) (err error)
 
@@ -33,7 +36,35 @@ func NewMQTTApi(config *ConfigData, secRunner *SectionRunner) *MQTTApi {
 	}
 }
 
-func (a *MQTTApi) createMQTTOpts(brokerURI *url.URL, cid string) (opts *mqtt.ClientOptions) {
+func (a *MQTTApi) createMQTTOpts() (opts *mqtt.ClientOptions) {
+	broker := os.Getenv("MQTT_BROKER")
+	if broker == "" {
+		broker = "tcp://localhost:1883"
+	}
+	brokerURI, err := url.Parse(broker)
+	if err != nil {
+		err = fmt.Errorf("error parsing MQTT_BROKER: %v", err)
+		return
+	}
+	if brokerURI.Scheme == "mqtt" { // translate scheme to compatible
+		brokerURI.Scheme = "tcp"
+	} else if brokerURI.Scheme == "mqtts" {
+		brokerURI.Scheme = "ssl"
+	} else if brokerURI.Scheme == "" {
+		brokerURI.Scheme = "tcp"
+	}
+	if brokerURI.Path != "" {
+		a.prefix = brokerURI.Path
+	} else {
+		a.prefix = "grinklers"
+	}
+	a.logger.Debugf("broker prefix: '%s'", a.prefix)
+
+	cid := os.Getenv("MQTT_CID")
+	if cid == "" {
+		cid = "grinklers-1"
+	}
+
 	opts = mqtt.NewClientOptions()
 	opts.AddBroker(brokerURI.String())
 	if brokerURI.User != nil {
@@ -51,27 +82,7 @@ func (a *MQTTApi) createMQTTOpts(brokerURI *url.URL, cid string) (opts *mqtt.Cli
 
 // Start connects to the MQTT broker and listens to the API topics
 func (a *MQTTApi) Start() (err error) {
-	broker := os.Getenv("MQTT_BROKER")
-	if broker == "" {
-		broker = "tcp://localhost:1883"
-	}
-	brokerURI, err := url.Parse(broker)
-	if err != nil {
-		err = fmt.Errorf("error parsing MQTT_BROKER: %v", err)
-		return
-	}
-	cid := os.Getenv("MQTT_CID")
-	if cid == "" {
-		cid = "grinklers-1"
-	}
-	if brokerURI.Path != "" {
-		a.prefix = brokerURI.Path
-	} else {
-		a.prefix = "grinklers"
-	}
-	a.logger.Debugf("broker prefix: '%s'", a.prefix)
-
-	opts := a.createMQTTOpts(brokerURI, cid)
+	opts := a.createMQTTOpts()
 	opts.SetWill(a.prefix+"/connected", "false", 1, true)
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		a.logger.Info("connected to mqtt broker")
@@ -83,11 +94,19 @@ func (a *MQTTApi) Start() (err error) {
 	})
 	a.client = mqtt.NewClient(opts)
 
-	if token := a.client.Connect(); token.Wait() && token.Error() != nil {
-		a.logger.WithError(token.Error()).Error("error connecting to mqtt broker")
-	}
+	go func() {
+		for {
+			if token := a.client.Connect(); token.WaitTimeout(MQTT_TIMEOUT) && token.Error() != nil {
+				a.logger.WithError(token.Error()).
+					Errorf("error connecting to mqtt broker. will retry in %v", CONNECT_RETRY_TIMEOUT)
+				time.Sleep(CONNECT_RETRY_TIMEOUT)
+			} else {
+				break
+			}
+		}
 
-	a.subscribe()
+		a.subscribe()
+	}()
 
 	return
 }
@@ -116,7 +135,7 @@ func (a *MQTTApi) Prefix() string {
 func (a *MQTTApi) updateConnected(connected bool) (err error) {
 	str := strconv.FormatBool(connected)
 	token := a.client.Publish(a.prefix+"/connected", 1, true, str)
-	if token.Wait(); token.Error() != nil {
+	if token.WaitTimeout(MQTT_TIMEOUT); token.Error() != nil {
 		return token.Error()
 	}
 	return

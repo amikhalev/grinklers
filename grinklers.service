@@ -1,0 +1,14 @@
+[Unit]
+Description=grinklers
+Wants=network.target
+
+[Service]
+Type=simple
+User=sprinklers
+Group=sprinklers
+WorkingDirectory=/opt/sprinklers
+ExecStart=/opt/sprinklers/grinklers
+EnvironmentFile=/opt/sprinklers/.env
+
+[Install]
+WantedBy=multi-user.target

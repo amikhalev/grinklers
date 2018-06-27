@@ -3,7 +3,9 @@ $(info using variables from .env file)
 include ./.env
 endif
 
-GO ?= go
+GO               ?=go
+RSYNC            ?=rsync
+RSYNC_FLAGS      ?=-rv --partial --progress
 
 SERVER_PACKAGE   :=./server
 SERVER_BINARY    :=./grinklers
@@ -15,7 +17,7 @@ GO_PACKAGE_PATHS :=$(subst $(word 1,$(GO_PACKAGES)),./,$(GO_PACKAGES))
 GO_SOURCES       :=$(shell find . -type f -name '*.go' -not -name '*_test.go')
 GO_TESTS         :=$(shell find . -type f -name '*_test.go')
 
-STATIC_FILES     :=config.example.json
+STATIC_FILES     :=config.example.json grinklers.service
 
 TEST_TIMEOUT     ?=10s
 TEST_FLAGS       ?=-timeout $(TEST_TIMEOUT)
@@ -27,8 +29,8 @@ DEPLOY_DIR       :=./rpi_deploy
 DEPLOY_BINARY    :=$(DEPLOY_DIR)/grinklers
 DEPLOY_FILES     :=$(addprefix $(DEPLOY_DIR)/,$(STATIC_FILES))
 DEPLOY_ENV       ?=GOOS=linux GOARCH=arm GOARM=6
-DEPLOY_HOST      ?=alex@192.168.1.30
-DEPLOY_PATH      ?=/home/alex/grinklers
+DEPLOY_HOST      ?=sprinklers@sprinklers.local
+DEPLOY_PATH      ?=/opt/sprinklers
 
 CLEAN_FILES      :=$(SERVER_BINARY) $(CLIENT_BINARY) $(DEPLOY_DIR) $(COV_OUTPUTS) $(COV_ALL) $(COV_HTML)
 
@@ -94,5 +96,5 @@ $(DEPLOY_FILES): $(DEPLOY_DIR)/%: ./%
 
 .PHONY: deploy
 deploy: $(DEPLOY_DIR) $(DEPLOY_BINARY) $(DEPLOY_FILES)
-	scp -r $(DEPLOY_DIR)/* $(DEPLOY_HOST):$(DEPLOY_PATH)/
+	$(RSYNC) $(RSYNC_FLAGS) $(DEPLOY_DIR)/ $(DEPLOY_HOST):$(DEPLOY_PATH)/
 	@echo "deploy successfully completed"
