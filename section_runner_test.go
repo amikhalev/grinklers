@@ -432,7 +432,7 @@ func (s *SectionRunnerSuite) TestPause() {
 	s.ass.NotNil(json.Current.PauseTime)
 
 	s.sr.Unpause()
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(40 * time.Millisecond)
 	s.ass.False(s.sr.State.Paused, "SectionRunner should not be paused")
 	s.ass.True(s.sec1.State(), "Section should be running")
 
@@ -446,6 +446,16 @@ func (s *SectionRunnerSuite) TestPause() {
 
 	s.sr.QueueSectionRun(s.sec2, 40*time.Millisecond)
 	s.sr.Pause()
+	time.Sleep(10 * time.Millisecond)
+
+	json, _ = s.sr.State.ToJSON(s.secs)
+	s.ass.True(json.Paused)
+	s.ass.Equal(0, json.Current.Section)
+	s.ass.Equal(60.0, json.Current.TotalDuration)
+	s.ass.InDelta(59.950, json.Current.Duration, .01)
+	s.ass.NotNil(json.Current.PauseTime)
+	s.ass.NotNil(json.Current.UnpauseTime)
+
 	s.sr.CancelID(id1)
 	time.Sleep(10 * time.Millisecond)
 	s.ass.True(s.sr.State.Paused, "SectionRunner should be paused")

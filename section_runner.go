@@ -392,7 +392,11 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			if paused {
 				var alreadyRunFor time.Duration
 				if state.Current != nil {
-					alreadyRunFor = now.Sub(*state.Current.StartTime)
+					if state.Current.UnpauseTime != nil {
+						alreadyRunFor = now.Sub(*state.Current.UnpauseTime)
+					} else {
+						alreadyRunFor = now.Sub(*state.Current.StartTime)
+					}
 					state.Current.Sec.SetState(false)
 					state.Current.PauseTime = &now
 					state.Current.Duration = state.Current.Duration - alreadyRunFor
