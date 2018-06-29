@@ -16,7 +16,7 @@ const SR_ID_ALL = -1;
 type SectionRunJSON struct {
 	ID            int32      `json:"id"`
 	Section       int        `json:"section"`
-	TotalDuration float64    `json:"TotalDuration"`
+	TotalDuration float64    `json:"totalDuration"`
 	Duration      float64    `json:"duration"`
 	StartTime     *time.Time `json:"startTime"`
 	PauseTime     *time.Time `json:"pauseTime"`
