@@ -77,6 +77,7 @@ func (a *MQTTApi) createMQTTOpts() (opts *mqtt.ClientOptions) {
 		}).Debug("authenticating to mqtt server")
 	}
 	opts.SetClientID(cid)
+	opts.SetCleanSession(false)
 	return
 }
 

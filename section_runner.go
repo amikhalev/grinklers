@@ -14,11 +14,13 @@ const SR_ID_ALL = -1;
 
 // SectionRunJSON is the JSON representation of a SectionRun
 type SectionRunJSON struct {
-	ID        int32      `json:"id"`
-	Section   int        `json:"section"`
-	Duration  float64    `json:"duration"`
-	StartTime *time.Time `json:"startTime"`
-	PauseTime *time.Time `json:"pauseTime"`
+	ID            int32      `json:"id"`
+	Section       int        `json:"section"`
+	TotalDuration float64    `json:"TotalDuration"`
+	Duration      float64    `json:"duration"`
+	StartTime     *time.Time `json:"startTime"`
+	PauseTime     *time.Time `json:"pauseTime"`
+	UnpauseTime   *time.Time `json:"unpauseTime"`
 }
 
 // SRStateJSON is the JSON representation of a SRState
@@ -34,22 +36,28 @@ type SectionRun struct {
 	RunID int32
 	// Sec is the section that should be run
 	Sec Section
-	// Duration is the duration the section is run for
+	// Duration is the total duration the section is to run for
+	TotalDuration time.Duration
+	// Duration is the remaining duration the section is to run for. This should equal TotalDuration unless the section
+	// is currently paused, or has been paused
 	Duration time.Duration
 	// Done is a chan that a value is sent on when the section is done running. This value is true
 	// if the section run was cancelled, and false if it finished normally
 	Done chan<- bool
-	// StartTime is the time the section started running, or nil if the section is still queued
+	// StartTime is the time the section started running, or nil if the section is still queued.
 	StartTime *time.Time
 	// PauseTime is the time the section was paused, if the SectionRunner is currently paused. Otherwise
 	// it is nil
 	PauseTime *time.Time
+	// UnpauseTime is the time the section was unpaused, if it was paused and then unpaused. Otherwise, nil
+	UnpauseTime *time.Time
 }
 
 // NewSectionRun creates a new SectionRun
 func NewSectionRun(runID int32, sec Section, duration time.Duration, doneChan chan<- bool) SectionRun {
 	return SectionRun{
-		runID, sec, duration, doneChan, nil, nil,
+		runID, sec, duration, duration, doneChan,
+		nil, nil, nil,
 	}
 }
 
@@ -63,7 +71,6 @@ func (sr *SectionRun) String() string {
 // ToJSON returns an the JSON representation of this SectionRun, or err if there was some error.
 // sections is a slice of the sections (in order to compute the section index)
 func (sr *SectionRun) ToJSON(sections []Section) (j SectionRunJSON, err error) {
-	j = SectionRunJSON{}
 	secID := -1
 	for i, sec := range sections {
 		if sr.Sec == sec {
@@ -74,11 +81,10 @@ func (sr *SectionRun) ToJSON(sections []Section) (j SectionRunJSON, err error) {
 		err = fmt.Errorf("the section of this program does not exist in the sections array")
 		return
 	}
-	j.ID = sr.RunID
-	j.Section = secID
-	j.Duration = sr.Duration.Seconds()
-	j.StartTime = sr.StartTime
-	j.PauseTime = sr.PauseTime
+    j = SectionRunJSON{
+    	sr.RunID, secID, sr.TotalDuration.Seconds(), sr.Duration.Seconds(),
+    	sr.StartTime, sr.PauseTime, sr.UnpauseTime,
+	}
 	return
 }
 
@@ -215,9 +221,9 @@ func (q SRQueue) RemoveAll() (removed []*SectionRun) {
 
 // SRState is the state of the SectionRunner. All accesses synchronized over Mu
 type SRState struct {
-	Queue      SRQueue
-	Current    *SectionRun
-	Paused     bool
+	Queue   SRQueue
+	Current *SectionRun
+	Paused  bool
 	sync.Mutex // gives it Lock() and Unlock methods
 }
 
@@ -382,29 +388,31 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 				state.Unlock()
 				break
 			}
+			now := time.Now()
 			if paused {
+				var alreadyRunFor time.Duration
 				if state.Current != nil {
+					alreadyRunFor = now.Sub(*state.Current.StartTime)
 					state.Current.Sec.SetState(false)
-					now := time.Now()
 					state.Current.PauseTime = &now
+					state.Current.Duration = state.Current.Duration - alreadyRunFor
 					delay = nil // so it never receives
 				}
 				state.Paused = true
 				r.log.WithFields(logrus.Fields{
+					"alreadyRunFor": alreadyRunFor,
 					"state": state,
 				}).Debug("paused section runner")
 			} else {
 				state.Paused = false
 				if state.Current != nil {
-					alreadyRunFor := state.Current.PauseTime.Sub(*state.Current.StartTime)
-					remaining := state.Current.Duration - alreadyRunFor
 					r.log.WithFields(logrus.Fields{
-						"alreadyRunFor": alreadyRunFor,
-						"remaining":     remaining,
+						"remaining":     state.Current.Duration,
 						"run":           state.Current,
 					}).Debug("resuming paused section")
-					delay = time.After(remaining)
+					delay = time.After(state.Current.Duration)
 					state.Current.PauseTime = nil
+					state.Current.UnpauseTime = &now
 					state.Current.Sec.SetState(true)
 				} else {
 					state.Current = state.Queue.Pop()

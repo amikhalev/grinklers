@@ -403,6 +403,9 @@ func (s *SectionRunnerSuite) TestPause() {
 	json, _ := s.sr.State.ToJSON(s.secs)
 	s.ass.Equal(0, json.Current.Section)
 	s.ass.Equal(60.0, json.Current.Duration)
+	s.ass.Equal(60.0, json.Current.TotalDuration)
+	s.ass.Nil(json.Current.PauseTime)
+	s.ass.Nil(json.Current.UnpauseTime)
 
 	s.sr.Pause()
 	time.Sleep(10 * time.Millisecond)
@@ -412,8 +415,10 @@ func (s *SectionRunnerSuite) TestPause() {
 	json, _ = s.sr.State.ToJSON(s.secs)
 	s.ass.True(json.Paused)
 	s.ass.Equal(0, json.Current.Section)
-	s.ass.Equal(60.0, json.Current.Duration)
+	s.ass.Equal(60.0, json.Current.TotalDuration)
+	s.ass.InDelta(59.990, json.Current.Duration, .01)
 	s.ass.NotNil(json.Current.PauseTime)
+	s.ass.Nil(json.Current.UnpauseTime)
 
 	s.sr.Pause() // double pause should change nothing
 	time.Sleep(10 * time.Millisecond)
@@ -423,7 +428,7 @@ func (s *SectionRunnerSuite) TestPause() {
 	json, _ = s.sr.State.ToJSON(s.secs)
 	s.ass.True(json.Paused)
 	s.ass.Equal(0, json.Current.Section)
-	s.ass.Equal(60.0, json.Current.Duration)
+	s.ass.InDelta(59.990, json.Current.Duration, .01)
 	s.ass.NotNil(json.Current.PauseTime)
 
 	s.sr.Unpause()
@@ -434,8 +439,10 @@ func (s *SectionRunnerSuite) TestPause() {
 	json, _ = s.sr.State.ToJSON(s.secs)
 	s.ass.False(json.Paused)
 	s.ass.Equal(0, json.Current.Section)
-	s.ass.Equal(60.0, json.Current.Duration)
+	s.ass.Equal(60.0, json.Current.TotalDuration)
+	s.ass.InDelta(59.990, json.Current.Duration, .01)
 	s.ass.Nil(json.Current.PauseTime)
+	s.ass.NotNil(json.Current.UnpauseTime)
 
 	s.sr.QueueSectionRun(s.sec2, 40*time.Millisecond)
 	s.sr.Pause()
@@ -468,7 +475,8 @@ func (s *SectionRunnerSuite) TestPause() {
 	json, _ = s.sr.State.ToJSON(s.secs)
 	s.ass.True(json.Paused)
 	s.ass.Equal(1, json.Current.Section)
-	s.ass.Equal(0.04, json.Current.Duration)
+	s.ass.Equal(0.04, json.Current.TotalDuration)
+	s.ass.InDelta(.01, json.Current.Duration, .01)
 	s.ass.NotNil(json.Current.PauseTime)
 
 	s.sr.Unpause()
