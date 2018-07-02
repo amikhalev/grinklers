@@ -8,12 +8,17 @@ import (
 type ErrorCode int32
 
 const (
-	EC_BadRequest   = 100
-	EC_NotSpecified = 101
-	EC_Parse        = 102
-	EC_Range        = 103
-	EC_InvalidData  = 104
-	EC_Internal     = 200
+	EC_BadRequest     = 100
+	EC_NotSpecified   = 101
+	EC_Parse          = 102
+	EC_Range          = 103
+	EC_InvalidData    = 104
+	EC_BadToken       = 105
+	EC_Unauthorized   = 106
+	EC_NoPermission   = 107
+	EC_NotImplemented = 108
+	EC_Internal       = 200
+	EC_Timeout        = 300
 )
 
 type MQTTError struct {

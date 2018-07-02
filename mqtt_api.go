@@ -333,7 +333,7 @@ func (a *MQTTApi) subscribe() {
 		if handler != nil {
 			err = handler(message, rData)
 		} else {
-			err = NewMQTTError(EC_BadRequest, fmt.Sprintf("invalid api request type: %s", data.Type))
+			err = NewMQTTError(EC_NotImplemented, fmt.Sprintf("invalid api request type: %s", data.Type))
 		}
 	})
 }
