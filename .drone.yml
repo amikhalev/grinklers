@@ -6,6 +6,6 @@ pipeline:
   build:
     image: golang:alpine
     commands:
-      - apk add make
+      - apk add make git
       - make get-deps
       - make all
