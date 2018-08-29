@@ -4,8 +4,7 @@ workspace:
 
 pipeline:
   build:
-    image: golang:alpine
+    image: golang:latest
     commands:
-      - apk add make git
       - make get-deps
       - make all
