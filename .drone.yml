@@ -4,7 +4,7 @@ workspace:
 
 pipeline:
   build:
-    image: golang:latest
+    image: golang:alpine
     commands:
       - make get-deps
       - make all
