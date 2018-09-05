@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/amikhalev/grinklers/sched"
+	"git.amikhalev.com/amikhalev/grinklers/sched"
 )
 
 // ProgItem is one item in a Program sequence

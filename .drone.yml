@@ -1,6 +1,6 @@
 workspace:
   base: /go
-  path: src/github.com/amikhalev/grinklers
+  path: src/git.amikhalev.com/amikhalev/grinklers
 
 pipeline:
   build:

@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/Sirupsen/logrus"
-	. "github.com/amikhalev/grinklers/sched"
+	. "git.amikhalev.com/amikhalev/grinklers/sched"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

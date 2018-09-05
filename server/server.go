@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
-	g "github.com/amikhalev/grinklers"
+	g "git.amikhalev.com/amikhalev/grinklers"
 	"github.com/joho/godotenv"
 )
 
