@@ -1,10 +1,11 @@
-package grinklers
+package logic
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
 
+	. "git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/Sirupsen/logrus"
 	"github.com/stianeikeland/go-rpio"
 )
@@ -49,7 +50,7 @@ func RpioSectionCleanup() (err error) {
 // unless rpi is set to false.
 type RpioSection struct {
 	name     string
-	id		 int
+	id       int
 	pin      rpio.Pin
 	onUpdate chan<- SecUpdate
 	log      *logrus.Entry
@@ -67,7 +68,7 @@ func NewRpioSection(name string, pin rpio.Pin) RpioSection {
 }
 
 type rpioSectionJSON struct {
-	ID   int 	  `json:"id"`
+	ID   int      `json:"id"`
 	Name string   `json:"name"`
 	Pin  rpio.Pin `json:"pin"`
 }
@@ -131,6 +132,10 @@ func (sec *RpioSection) State() bool {
 // Name gets the name of this RpioSection
 func (sec *RpioSection) Name() string {
 	return sec.name
+}
+
+func (sec *RpioSection) ID() int {
+	return sec.id
 }
 
 // RpioSections represents a list of Sections that are all RpioSections

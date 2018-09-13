@@ -1,37 +1,40 @@
-package grinklers
+package mqtt
 
 import (
+	"git.amikhalev.com/amikhalev/grinklers/config"
+	"git.amikhalev.com/amikhalev/grinklers/logic"
+	"git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/Sirupsen/logrus"
 )
 
 // MQTTUpdater updates MQTT topics with the current state of the application
 type MQTTUpdater struct {
-	config                *ConfigData
-	onSectionUpdate       chan SecUpdate
-	onProgramUpdate       chan ProgUpdate
-	onSectionRunnerUpdate chan *SRState
+	config                *config.ConfigData
+	onSectionUpdate       chan logic.SecUpdate
+	onProgramUpdate       chan logic.ProgUpdate
+	onSectionRunnerUpdate chan *logic.SRState
 	stop                  chan int
 	api                   *MQTTApi
 	logger                *logrus.Entry
 }
 
 // NewMQTTUpdater creates a new MQTTUpdater which uses the specified state
-func NewMQTTUpdater(config *ConfigData, sectionRunner *SectionRunner) *MQTTUpdater {
-	onSectionUpdate := make(chan SecUpdate, 10)
-	onProgramUpdate := make(chan ProgUpdate, 10)
-	onSectionRunnerUpdate := make(chan *SRState, 10)
+func NewMQTTUpdater(config *config.ConfigData, sectionRunner *logic.SectionRunner) *MQTTUpdater {
+	onSectionUpdate := make(chan logic.SecUpdate, 10)
+	onProgramUpdate := make(chan logic.ProgUpdate, 10)
+	onSectionRunnerUpdate := make(chan *logic.SRState, 10)
 	stop := make(chan int)
 	for i := range config.Sections {
 		config.Sections[i].SetOnUpdate(onSectionUpdate)
 	}
 	for i := range config.Programs {
-		config.Programs[i].OnUpdate = onProgramUpdate
+		config.Programs[i].UpdateChan = onProgramUpdate
 	}
 	sectionRunner.OnUpdateState = onSectionRunnerUpdate
 	return &MQTTUpdater{
 		config,
 		onSectionUpdate, onProgramUpdate, onSectionRunnerUpdate, stop, nil,
-		Logger.WithField("module", "MQTTUpdater"),
+		util.Logger.WithField("module", "MQTTUpdater"),
 	}
 }
 
@@ -56,7 +59,7 @@ func (u *MQTTUpdater) run() {
 			return
 		case secUpdate := <-u.onSectionUpdate:
 			//logger.Debug("sec update")
-			ExhaustChan(u.onSectionUpdate)
+			util.ExhaustChan(u.onSectionUpdate)
 
 			index := -1
 			for i, s := range u.config.Sections {
@@ -70,12 +73,12 @@ func (u *MQTTUpdater) run() {
 
 			var err error
 			switch secUpdate.Type {
-			case SecUpdateData:
+			case logic.SecUpdateData:
 				err = u.api.UpdateSectionData(index, secUpdate.Sec)
 				if err == nil {
-					err = WriteConfig(u.config)
+					err = config.WriteConfig(u.config)
 				}
-			case SecUpdateState:
+			case logic.SecUpdateState:
 				err = u.api.UpdateSectionState(index, secUpdate.Sec)
 			default:
 			}
@@ -84,11 +87,11 @@ func (u *MQTTUpdater) run() {
 			}
 		case progUpdate := <-u.onProgramUpdate:
 			//logger.Debug("prog update")
-			ExhaustChan(u.onProgramUpdate)
+			util.ExhaustChan(u.onProgramUpdate)
 
 			index := -1
 			for i := range u.config.Programs {
-				if &u.config.Programs[i] == progUpdate.Prog {
+				if u.config.Programs[i] == progUpdate.Prog {
 					index = i
 				}
 			}
@@ -98,12 +101,12 @@ func (u *MQTTUpdater) run() {
 
 			var err error
 			switch progUpdate.Type {
-			case ProgUpdateData:
+			case logic.ProgUpdateData:
 				err = u.api.UpdateProgramData(index, progUpdate.Prog)
 				if err == nil {
-					err = WriteConfig(u.config)
+					err = config.WriteConfig(u.config)
 				}
-			case pupdateRunning:
+			case logic.ProgUpdateRunning:
 				err = u.api.UpdateProgramRunning(index, progUpdate.Prog)
 			default:
 			}
@@ -111,7 +114,7 @@ func (u *MQTTUpdater) run() {
 				u.logger.WithError(err).Error("error updating sections")
 			}
 		case srState := <-u.onSectionRunnerUpdate:
-			ExhaustChan(u.onSectionRunnerUpdate)
+			util.ExhaustChan(u.onSectionRunnerUpdate)
 			srState.Lock()
 			u.logger.WithField("srState", srState).Debugf("section runner update")
 			srState.Unlock()

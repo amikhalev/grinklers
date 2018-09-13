@@ -1,4 +1,4 @@
-package grinklers
+package logic
 
 import (
 	"fmt"
@@ -7,10 +7,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	. "git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/Sirupsen/logrus"
 )
 
-const SR_ID_ALL = -1;
+const SR_ID_ALL = -1
 
 // SectionRunJSON is the JSON representation of a SectionRun
 type SectionRunJSON struct {
@@ -81,9 +82,9 @@ func (sr *SectionRun) ToJSON(sections []Section) (j SectionRunJSON, err error) {
 		err = fmt.Errorf("the section of this program does not exist in the sections array")
 		return
 	}
-    j = SectionRunJSON{
-    	sr.RunID, secID, sr.TotalDuration.Seconds(), sr.Duration.Seconds(),
-    	sr.StartTime, sr.PauseTime, sr.UnpauseTime,
+	j = SectionRunJSON{
+		sr.RunID, secID, sr.TotalDuration.Seconds(), sr.Duration.Seconds(),
+		sr.StartTime, sr.PauseTime, sr.UnpauseTime,
 	}
 	return
 }
@@ -221,9 +222,9 @@ func (q SRQueue) RemoveAll() (removed []*SectionRun) {
 
 // SRState is the state of the SectionRunner. All accesses synchronized over Mu
 type SRState struct {
-	Queue   SRQueue
-	Current *SectionRun
-	Paused  bool
+	Queue      SRQueue
+	Current    *SectionRun
+	Paused     bool
 	sync.Mutex // gives it Lock() and Unlock methods
 }
 
@@ -405,14 +406,14 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 				state.Paused = true
 				r.log.WithFields(logrus.Fields{
 					"alreadyRunFor": alreadyRunFor,
-					"state": state,
+					"state":         state,
 				}).Debug("paused section runner")
 			} else {
 				state.Paused = false
 				if state.Current != nil {
 					r.log.WithFields(logrus.Fields{
-						"remaining":     state.Current.Duration,
-						"run":           state.Current,
+						"remaining": state.Current.Duration,
+						"run":       state.Current,
 					}).Debug("resuming paused section")
 					delay = time.After(state.Current.Duration)
 					state.Current.PauseTime = nil

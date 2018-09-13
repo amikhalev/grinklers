@@ -1,4 +1,4 @@
-package grinklers
+package mqtt
 
 import (
 	"encoding/json"
@@ -8,6 +8,10 @@ import (
 	"strconv"
 	"time"
 
+	"git.amikhalev.com/amikhalev/grinklers/config"
+	"git.amikhalev.com/amikhalev/grinklers/datamodel"
+	"git.amikhalev.com/amikhalev/grinklers/logic"
+	"git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/Sirupsen/logrus"
 	"github.com/eclipse/paho.mqtt.golang"
 )
@@ -20,19 +24,19 @@ type requestHandler func(message mqtt.Message, rData responseData) (err error)
 
 // MQTTApi encapsulates all functionality exposed over MQTT
 type MQTTApi struct {
-	config    *ConfigData
-	secRunner *SectionRunner
+	config    *config.ConfigData
+	secRunner *logic.SectionRunner
 	client    mqtt.Client
 	prefix    string
 	logger    *logrus.Entry
 }
 
 // NewMQTTApi creates a new MQTTApi that uses the specified data
-func NewMQTTApi(config *ConfigData, secRunner *SectionRunner) *MQTTApi {
+func NewMQTTApi(config *config.ConfigData, secRunner *logic.SectionRunner) *MQTTApi {
 	return &MQTTApi{
 		config, secRunner,
 		nil, "",
-		Logger.WithField("module", "MQTTApi"),
+		util.Logger.WithField("module", "MQTTApi"),
 	}
 }
 
@@ -157,7 +161,7 @@ func (a *MQTTApi) UpdateAll() (err error) {
 }
 
 // UpdateSectionData updates the topic for the specified section
-func (a *MQTTApi) UpdateSectionData(index int, sec Section) (err error) {
+func (a *MQTTApi) UpdateSectionData(index int, sec logic.Section) (err error) {
 	bytes, err := json.Marshal(sec)
 	if err != nil {
 		err = fmt.Errorf("error marshalling section: %v", err)
@@ -168,14 +172,14 @@ func (a *MQTTApi) UpdateSectionData(index int, sec Section) (err error) {
 }
 
 // UpdateSectionState updates the topic for the current state of the section
-func (a *MQTTApi) UpdateSectionState(index int, sec Section) (err error) {
+func (a *MQTTApi) UpdateSectionState(index int, sec logic.Section) (err error) {
 	bytes := []byte(strconv.FormatBool(sec.State()))
 	a.client.Publish(fmt.Sprintf("%s/sections/%d/state", a.prefix, index), 1, true, bytes)
 	return
 }
 
 // UpdateSections updates the topics for all the specified sections
-func (a *MQTTApi) UpdateSections(sections []Section) (err error) {
+func (a *MQTTApi) UpdateSections(sections []logic.Section) (err error) {
 	lenSections := len(sections)
 	bytes := []byte(strconv.Itoa(lenSections))
 	a.client.Publish(a.prefix+"/sections", 1, true, bytes)
@@ -194,8 +198,8 @@ func (a *MQTTApi) UpdateSections(sections []Section) (err error) {
 }
 
 // UpdateProgramData updates the topic for the data about the specified Program
-func (a *MQTTApi) UpdateProgramData(index int, prog *Program) (err error) {
-	data, err := prog.ToJSON(a.config.Sections)
+func (a *MQTTApi) UpdateProgramData(index int, prog *logic.Program) (err error) {
+	data, err := datamodel.ProgramToJSON(prog)
 	if err != nil {
 		err = fmt.Errorf("error converting programs to json: %v", err)
 		return
@@ -210,19 +214,19 @@ func (a *MQTTApi) UpdateProgramData(index int, prog *Program) (err error) {
 }
 
 // UpdateProgramRunning updates the topic for the current running state of the Program
-func (a *MQTTApi) UpdateProgramRunning(index int, prog *Program) (err error) {
+func (a *MQTTApi) UpdateProgramRunning(index int, prog *logic.Program) (err error) {
 	bytes := []byte(strconv.FormatBool(prog.Running()))
 	a.client.Publish(fmt.Sprintf("%s/programs/%d/running", a.prefix, index), 1, true, bytes)
 	return
 }
 
 // UpdatePrograms updates the topics for all the specified Programs
-func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
+func (a *MQTTApi) UpdatePrograms(programs []*logic.Program) (err error) {
 	lenPrograms := len(programs)
 	bytes := []byte(strconv.Itoa(lenPrograms))
 	a.client.Publish(a.prefix+"/programs", 1, true, bytes)
 	for i := range programs {
-		prog := &programs[i]
+		prog := programs[i]
 		err = a.UpdateProgramData(i, prog)
 		if err != nil {
 			return
@@ -237,7 +241,7 @@ func (a *MQTTApi) UpdatePrograms(programs []Program) (err error) {
 }
 
 // UpdateSectionRunner updates the current section_runner state with the specified SRState
-func (a *MQTTApi) UpdateSectionRunner(state *SRState) (err error) {
+func (a *MQTTApi) UpdateSectionRunner(state *logic.SRState) (err error) {
 	state.Lock()
 	data, err := state.ToJSON(a.config.Sections)
 	state.Unlock()
@@ -268,12 +272,12 @@ func (a *MQTTApi) subscribe() {
 
 		defer func() {
 			var (
-				merr *MQTTError
-				ok bool
+				merr *util.Error
+				ok   bool
 			)
 			if err != nil {
-				if merr, ok = err.(*MQTTError); !ok {
-					merr = NewInternalError(err)
+				if merr, ok = err.(*util.Error); !ok {
+					merr = util.NewInternalError(err)
 				}
 			}
 			if merr != nil {
@@ -333,35 +337,35 @@ func (a *MQTTApi) subscribe() {
 		if handler != nil {
 			err = handler(message, rData)
 		} else {
-			err = NewMQTTError(EC_NotImplemented, fmt.Sprintf("invalid api request type: %s", data.Type))
+			err = util.NewError(util.EC_NotImplemented, fmt.Sprintf("invalid api request type: %s", data.Type))
 		}
 	})
 }
 
 func parseDuration(durStr *string) (duration *time.Duration, err error) {
 	if durStr == nil {
-		err = NewNotSpecifiedError("duration")
+		err = util.NewNotSpecifiedError("duration")
 		return
 	}
 	dur, err := time.ParseDuration(*durStr)
 	duration = &dur
 	if err != nil {
-		err = NewParseError("duration", err)
+		err = util.NewParseError("duration", err)
 	}
 	return
 }
 
-func (a *MQTTApi) getProgram(progID *int) (program *Program, err error) {
-	err = CheckRange(progID, "program ID", len(a.config.Programs))
+func (a *MQTTApi) getProgram(progID *int) (program *logic.Program, err error) {
+	err = util.CheckRange(progID, "program ID", len(a.config.Programs))
 	if err != nil {
 		return
 	}
-	program = &a.config.Programs[*progID]
+	program = a.config.Programs[*progID]
 	return
 }
 
-func (a *MQTTApi) getSection(secID *int) (section Section, err error) {
-	err = CheckRange(secID, "section ID", len(a.config.Sections))
+func (a *MQTTApi) getSection(secID *int) (section logic.Section, err error) {
+	err = util.CheckRange(secID, "section ID", len(a.config.Sections))
 	if err != nil {
 		return
 	}
@@ -375,7 +379,7 @@ func (a *MQTTApi) runProgram(message mqtt.Message, rData responseData) (err erro
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
-		err = NewParseError("runProgram request", err)
+		err = util.NewParseError("runProgram request", err)
 		return
 	}
 	program, err := a.getProgram(data.ProgramID)
@@ -393,7 +397,7 @@ func (a *MQTTApi) cancelProgram(message mqtt.Message, rData responseData) (err e
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
-		err = NewParseError("cancelProgram request", err)
+		err = util.NewParseError("cancelProgram request", err)
 		return
 	}
 	program, err := a.getProgram(data.ProgramID)
@@ -408,23 +412,23 @@ func (a *MQTTApi) cancelProgram(message mqtt.Message, rData responseData) (err e
 func (a *MQTTApi) updateProgram(message mqtt.Message, rData responseData) (err error) {
 	var data struct {
 		ProgramID *int
-		Data      ProgramJSON
+		Data      datamodel.ProgramJSON
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
-		err = NewParseError("updateProgram request", err)
+		err = util.NewParseError("updateProgram request", err)
 		return
 	}
 	program, err := a.getProgram(data.ProgramID)
 	if err != nil {
 		return
 	}
-	err = program.Update(data.Data, a.config.Sections)
+	err = data.Data.Update(program, a.config.Sections)
 	if err != nil {
-		err = NewInvalidDataError("program update", err)
+		err = util.NewInvalidDataError("program update", err)
 		return
 	}
-	programJSON, err := program.ToJSON(a.config.Sections)
+	programJSON, err := datamodel.ProgramToJSON(program)
 	if err != nil {
 		return
 	}
@@ -440,7 +444,7 @@ func (a *MQTTApi) runSection(message mqtt.Message, rData responseData) (err erro
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
-		err = NewParseError("runSection request", err)
+		err = util.NewParseError("runSection request", err)
 		return
 	}
 	sec, err := a.getSection(data.SectionID)
@@ -460,7 +464,7 @@ func (a *MQTTApi) cancelSection(message mqtt.Message, rData responseData) (err e
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
-		err = NewParseError("cancelSection request", err)
+		err = util.NewParseError("cancelSection request", err)
 		return
 	}
 	sec, err := a.getSection(data.SectionID)
@@ -478,7 +482,7 @@ func (a *MQTTApi) cancelSectionRunID(message mqtt.Message, rData responseData) (
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil || data.RunID == nil {
-		err = NewParseError("cancelSectionRunId request", err)
+		err = util.NewParseError("cancelSectionRunId request", err)
 		return
 	}
 	a.secRunner.CancelID(*data.RunID)
@@ -487,10 +491,10 @@ func (a *MQTTApi) cancelSectionRunID(message mqtt.Message, rData responseData) (
 }
 
 func (a *MQTTApi) cancelAllSectionRuns(message mqtt.Message, rData responseData) (err error) {
-	var data struct {}
+	var data struct{}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil {
-		err = NewParseError("cancelAllSectionRuns request", err)
+		err = util.NewParseError("cancelAllSectionRuns request", err)
 		return
 	}
 	a.secRunner.CancelAll()
@@ -504,7 +508,7 @@ func (a *MQTTApi) pauseSectionRunner(message mqtt.Message, rData responseData) (
 	}
 	err = json.Unmarshal(message.Payload(), &data)
 	if err != nil || data.Paused == nil {
-		err = NewParseError("parse pauseSectionRunner request", err)
+		err = util.NewParseError("parse pauseSectionRunner request", err)
 		return
 	}
 	rData["paused"] = data.Paused

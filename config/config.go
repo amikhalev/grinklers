@@ -1,4 +1,4 @@
-package grinklers
+package config
 
 import (
 	"encoding/json"
@@ -6,26 +6,30 @@ import (
 	"io/ioutil"
 	"os"
 	"sync"
+
+	"git.amikhalev.com/amikhalev/grinklers/datamodel"
+	"git.amikhalev.com/amikhalev/grinklers/logic"
+	. "git.amikhalev.com/amikhalev/grinklers/util"
 )
 
 // ConfigData is the app state after being read from config
 type ConfigData struct {
-	Sections []Section
-	Programs []Program
+	Sections []logic.Section
+	Programs []*logic.Program
 }
 
 // ToJSON converts a ConfigData to a ConfigDataJSON
 func (c *ConfigData) ToJSON() (j ConfigDataJSON, err error) {
 	j = ConfigDataJSON{}
 	j.Sections = c.Sections
-	j.Programs, err = ProgramsToJSON(c.Programs, c.Sections)
+	j.Programs, err = datamodel.ProgramsToJSON(c.Programs, c.Sections)
 	return
 }
 
 // ConfigDataJSON is the JSON form of config data
 type ConfigDataJSON struct {
-	Sections RpioSections `json:"sections"`
-	Programs ProgramsJSON `json:"programs"`
+	Sections logic.RpioSections     `json:"sections"`
+	Programs datamodel.ProgramsJSON `json:"programs"`
 }
 
 // ToConfigData converts a ConfigDataJSON to a ConfigData

@@ -1,4 +1,4 @@
-package grinklers
+package logic
 
 import (
 	"encoding/json"
@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRpioSectionInit(t *testing.T) {
-	Logger.Out = ioutil.Discard
+	util.Logger.Out = ioutil.Discard
 
 	os.Setenv("RPI", "true")
 	assert.Error(t, RpioSectionInit())

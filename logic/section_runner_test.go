@@ -1,47 +1,15 @@
-package grinklers
+package logic
 
 import (
 	"io/ioutil"
 	"testing"
 	"time"
 
+	"git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 )
-
-type MockSection struct {
-	state bool
-	name  string
-	t     *testing.T
-	mock.Mock
-}
-
-func newMockSection(name string, t *testing.T) *MockSection {
-	return &MockSection{false, name, t, mock.Mock{}}
-}
-
-func (m *MockSection) SetState(on bool) {
-	m.Called(on)
-	m.state = on
-}
-
-func (m *MockSection) State() bool {
-	return m.state
-}
-
-func (m *MockSection) SetOnUpdate(onUpdate chan<- SecUpdate) {
-	m.Called(onUpdate)
-}
-
-func (m *MockSection) Name() string {
-	return m.name
-}
-
-func (m *MockSection) SetupReturns() {
-	m.On("SetState", true).Return()
-	m.On("SetState", false).Return()
-}
 
 func (m *MockSection) AssertRunning() {
 	assert.True(m.t, m.State(), "Section %s should be running", m.name)
@@ -58,7 +26,7 @@ func (m *MockSection) AssertAllCalled() {
 var _ Section = (*MockSection)(nil)
 
 func TestSectionRun_String(t *testing.T) {
-	sec := newMockSection("sec", t)
+	sec := NewMockSection(0, "sec", t)
 	sr := NewSectionRun(0, sec, 1*time.Second, nil)
 	assert.Equal(t, "{'sec' for 1s}", sr.String())
 }
@@ -74,9 +42,9 @@ type SRQueueSuite struct {
 
 func (s *SRQueueSuite) SetupSuite() {
 	s.a = assert.New(s.T())
-	s.sec1 = newMockSection("mock 1", s.T())
-	s.sec2 = newMockSection("mock 2", s.T())
-	s.sec3 = newMockSection("mock 3", s.T())
+	s.sec1 = NewMockSection(0, "mock 1", s.T())
+	s.sec2 = NewMockSection(1, "mock 2", s.T())
+	s.sec3 = NewMockSection(2, "mock 3", s.T())
 }
 
 func (s *SRQueueSuite) SetupTest() {
@@ -205,9 +173,9 @@ func (s *SectionRunnerSuite) SetupSuite() {
 }
 
 func (s *SectionRunnerSuite) SetupTest() {
-	Logger.Out = ioutil.Discard
-	s.sec1 = newMockSection("mock 1", s.T())
-	s.sec2 = newMockSection("mock 2", s.T())
+	util.Logger.Out = ioutil.Discard
+	s.sec1 = NewMockSection(0, "mock 1", s.T())
+	s.sec2 = NewMockSection(1, "mock 2", s.T())
 	s.secs = []Section{s.sec1, s.sec2}
 	s.sr = NewSectionRunner()
 	s.sr.Start(nil)

@@ -1,4 +1,4 @@
-package grinklers
+package util
 
 import (
 	"fmt"
@@ -21,42 +21,42 @@ const (
 	EC_Timeout        = 300
 )
 
-type MQTTError struct {
+type Error struct {
 	Code    ErrorCode
 	Message string
 	Name    string
 	Cause   error
 }
 
-func NewMQTTError(code ErrorCode, message string) *MQTTError {
-	return &MQTTError{code, message, "", nil}
+func NewError(code ErrorCode, message string) *Error {
+	return &Error{code, message, "", nil}
 }
 
-func (e *MQTTError) Error() string {
+func (e *Error) Error() string {
 	if e.Cause != nil {
 		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
 	}
 	return e.Message
 }
 
-var _ error = &MQTTError{}
+var _ error = &Error{}
 
 func NewNotSpecifiedError(name string) error {
-	return &MQTTError{EC_NotSpecified, fmt.Sprintf("%s not specified", name), name, nil}
+	return &Error{EC_NotSpecified, fmt.Sprintf("%s not specified", name), name, nil}
 }
 
 func NewParseError(parseType string, cause error) error {
-	return &MQTTError{EC_Parse,
+	return &Error{EC_Parse,
 		fmt.Sprintf("could not parse %s", parseType), parseType, cause}
 }
 
 func NewInvalidDataError(dataType string, cause error) error {
-	return &MQTTError{EC_InvalidData,
+	return &Error{EC_InvalidData,
 		fmt.Sprintf("could not process %s", dataType), dataType, cause}
 }
 
-func NewInternalError(cause error) *MQTTError {
-	return &MQTTError{EC_Internal, "internal error", "", cause}
+func NewInternalError(cause error) *Error {
+	return &Error{EC_Internal, "internal error", "", cause}
 }
 
 // CheckNotNil checks that ref is not nil and produces an err with a Message if it is. name should be the
@@ -75,7 +75,7 @@ func CheckRange(ref *int, name string, max int) (err error) {
 	if err = CheckNotNil(ref, name); err != nil {
 		return
 	}
-	var message string = ""
+	var message string
 	if *ref < 0 {
 		message = fmt.Sprintf("%s out of range: %d < 0", name, *ref)
 	}
@@ -83,7 +83,7 @@ func CheckRange(ref *int, name string, max int) (err error) {
 		message = fmt.Sprintf("%s out of range: %d >= %d", name, *ref, max)
 	}
 	if message != "" {
-		err = &MQTTError{EC_Range, message, name, nil}
+		err = &Error{EC_Range, message, name, nil}
 	}
 	return
 }

@@ -1,4 +1,4 @@
-package grinklers
+package util
 
 import (
 	"reflect"

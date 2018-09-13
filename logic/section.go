@@ -1,4 +1,4 @@
-package grinklers
+package logic
 
 // SecUpdateType is the type of a SecUpdate
 type SecUpdateType int
@@ -22,4 +22,5 @@ type Section interface {
 	State() (on bool)
 	SetOnUpdate(chan<- SecUpdate)
 	Name() string
+	ID() int
 }

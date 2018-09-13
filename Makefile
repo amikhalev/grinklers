@@ -12,10 +12,13 @@ SERVER_BINARY    :=./grinklers
 CLIENT_PACKAGE   :=./client
 CLIENT_BINARY    :=./grinklers_client
 
+GO_TOP			 :=git.amikhalev.com/amikhalev/grinklers
 GO_PACKAGES      :=$(shell go list ./...)
-GO_PACKAGE_PATHS :=$(subst $(word 1,$(GO_PACKAGES)),./,$(GO_PACKAGES))
+GO_PACKAGE_PATHS :=$(subst $(GO_TOP),./,$(GO_PACKAGES))
 GO_SOURCES       :=$(shell find . -type f -name '*.go' -not -name '*_test.go')
 GO_TESTS         :=$(shell find . -type f -name '*_test.go')
+
+$(info GO_PACKAGE_PATHS: $(GO_PACKAGE_PATHS))
 
 STATIC_FILES     :=config.example.json grinklers.service
 

@@ -5,8 +5,10 @@ import (
 	"os/signal"
 	"sync"
 
+	c "git.amikhalev.com/amikhalev/grinklers/config"
+	l "git.amikhalev.com/amikhalev/grinklers/logic"
+	"git.amikhalev.com/amikhalev/grinklers/mqtt"
 	log "github.com/Sirupsen/logrus"
-	g "git.amikhalev.com/amikhalev/grinklers"
 	"github.com/joho/godotenv"
 )
 
@@ -17,28 +19,28 @@ func main() {
 
 	godotenv.Load()
 
-	err := g.RpioSectionInit()
+	err := l.RpioSectionInit()
 	if err != nil {
 		log.WithError(err).Fatalf("error initializing sections")
 	}
 
-	config, err := g.LoadConfig()
+	config, err := c.LoadConfig()
 	if err != nil {
 		log.WithError(err).Fatalf("error loading config")
 	}
 
 	log.Info("writing back config")
-	g.WriteConfig(&config)
+	c.WriteConfig(&config)
 
 	waitGroup := sync.WaitGroup{}
 
-	secRunner := g.NewSectionRunner()
+	secRunner := l.NewSectionRunner()
 	secRunner.Start(&waitGroup)
 
 	sections := config.Sections
 	programs := config.Programs
 
-	updater := g.NewMQTTUpdater(&config, secRunner)
+	updater := mqtt.NewMQTTUpdater(&config, secRunner)
 
 	log.Debug("initializing sections and programs")
 
@@ -57,7 +59,7 @@ func main() {
 		"lenSections": len(sections), "lenPrograms": len(programs),
 	}).Info("initialized sections and programs")
 
-	api := g.NewMQTTApi(&config, secRunner)
+	api := mqtt.NewMQTTApi(&config, secRunner)
 	api.Start()
 
 	updater.Start(api)
@@ -73,5 +75,5 @@ func main() {
 	secRunner.Quit()
 	waitGroup.Wait()
 	stopAll()
-	g.RpioSectionCleanup()
+	l.RpioSectionCleanup()
 }
