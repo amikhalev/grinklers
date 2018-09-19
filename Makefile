@@ -42,7 +42,7 @@ all: $(SERVER_BINARY) $(CLIENT_BINARY) vet test cover
 
 .PHONY: clean
 clean:
-	$(GO) clean
+	$(GO) clean -cache -testcache
 	rm -rf $(CLEAN_FILES)
 
 $(SERVER_BINARY): $(GO_SOURCES)
