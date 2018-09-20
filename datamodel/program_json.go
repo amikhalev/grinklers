@@ -6,7 +6,7 @@ import (
 
 	"git.amikhalev.com/amikhalev/grinklers/logic"
 	"git.amikhalev.com/amikhalev/grinklers/sched"
-	. "git.amikhalev.com/amikhalev/grinklers/util"
+	"git.amikhalev.com/amikhalev/grinklers/util"
 )
 
 // ProgItemJSON is the JSON representation of a ProgItem
@@ -19,31 +19,27 @@ type ProgItemJSON struct {
 // ToProgItem converts a ProgItemJSON to a ProgItem
 func (data *ProgItemJSON) ToProgItem(sections []logic.Section) (pi *logic.ProgItem, err error) {
 	dur := time.Duration(data.Duration * float64(time.Second))
-	if err = CheckRange(&data.Section, "section id", len(sections)); err != nil {
+	if err = util.CheckRange(&data.Section, "section id", len(sections)); err != nil {
 		err = fmt.Errorf("invalid program item section id: %v", err)
 		return
 	}
-	pi = &logic.ProgItem{Sec: sections[data.Section], Duration: dur}
+	pi = &logic.ProgItem{Sec: &sections[data.Section], Duration: dur}
 	return
 }
 
 // ProgItemToJSON converts a ProgItem to a ProgItemJSON
-func ProgItemToJSON(pi *logic.ProgItem) (data ProgItemJSON, err error) {
-	data = ProgItemJSON{pi.Sec.ID(), pi.Duration.Seconds()}
-	return
+func ProgItemToJSON(pi *logic.ProgItem) ProgItemJSON {
+	return ProgItemJSON{pi.Sec.ID, pi.Duration.Seconds()}
 }
 
 // ProgSequenceJSON is a sequence of ProgItemJSONs
 type ProgSequenceJSON []ProgItemJSON
 
 // ProgSequenceToJSON converts a ProgSequence to a ProgSequenceJSON
-func ProgSequenceToJSON(seq logic.ProgSequence) (seqj ProgSequenceJSON, err error) {
+func ProgSequenceToJSON(seq logic.ProgSequence) (seqj ProgSequenceJSON) {
 	seqj = make(ProgSequenceJSON, len(seq))
 	for i := range seq {
-		seqj[i], err = ProgItemToJSON(&seq[i])
-		if err != nil {
-			return
-		}
+		seqj[i] = ProgItemToJSON(&seq[i])
 	}
 	return
 }
@@ -85,7 +81,7 @@ func (data *ProgramJSON) ToProgram(sections []logic.Section) (prog *logic.Progra
 		schedule = sched.Schedule{}
 		enabled  = false
 	)
-	if err = CheckNotNil(data.Name, "name"); err != nil {
+	if err = util.CheckNotNil(data.Name, "name"); err != nil {
 		return
 	}
 	sequence, err = data.Sequence.ToSequence(sections)
@@ -129,16 +125,12 @@ func (data *ProgramJSON) Update(prog *logic.Program, sections []logic.Section) (
 	return
 }
 
-// ToJSON converts a Program to a ProgramJSON
-func ProgramToJSON(prog *logic.Program) (data ProgramJSON, err error) {
+// ProgramToJSON locks and converts a Program to a ProgramJSON
+func ProgramToJSON(prog *logic.Program) (data ProgramJSON) {
 	prog.Lock()
 	defer prog.Unlock()
-	sequence, err := ProgSequenceToJSON(prog.Sequence)
-	if err != nil {
-		return
-	}
-	data = ProgramJSON{prog.ID, &prog.Name, sequence, &prog.Sched, &prog.Enabled}
-	return
+	sequence := ProgSequenceToJSON(prog.Sequence)
+	return ProgramJSON{prog.ID, &prog.Name, sequence, &prog.Sched, &prog.Enabled}
 }
 
 // ProgramsJSON represents multiple ProgramJSONs in a JSON array
@@ -159,13 +151,10 @@ func (progs ProgramsJSON) ToPrograms(sections []logic.Section) (programs []*logi
 }
 
 // ProgramsToJSON converts programs to ProgramsJSON
-func ProgramsToJSON(programs []*logic.Program, sections []logic.Section) (data ProgramsJSON, err error) {
+func ProgramsToJSON(programs []*logic.Program) (data ProgramsJSON) {
 	data = make(ProgramsJSON, len(programs))
 	for i := range programs {
-		data[i], err = ProgramToJSON(programs[i])
-		if err != nil {
-			return
-		}
+		data[i] = ProgramToJSON(programs[i])
 	}
 	return
 }

@@ -5,13 +5,13 @@ import (
 	"time"
 
 	"git.amikhalev.com/amikhalev/grinklers/sched"
-	. "git.amikhalev.com/amikhalev/grinklers/util"
+	"git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/Sirupsen/logrus"
 )
 
 // ProgItem is one item in a Program sequence
 type ProgItem struct {
-	Sec      Section
+	Sec      *Section
 	Duration time.Duration
 }
 
@@ -50,9 +50,9 @@ type Program struct {
 	Sequence   ProgSequence
 	Sched      sched.Schedule
 	Enabled    bool
-	running    AtomicBool
+	running    util.AtomicBool
 	runner     chan ProgRunnerMsg
-	UpdateChan chan<- ProgUpdate
+	updateChan chan<- ProgUpdate
 	log        *logrus.Entry
 	sync.Mutex // all fields should be accessed through this mutext
 }
@@ -62,16 +62,20 @@ func NewProgram(name string, sequence []ProgItem, schedule sched.Schedule, enabl
 	runner := make(chan ProgRunnerMsg)
 	return &Program{
 		0, name, sequence, schedule, enabled,
-		NewAtomicBool(false), runner, nil,
-		Logger.WithField("program", name),
+		util.NewAtomicBool(false), runner, nil,
+		util.Logger.WithField("program", name),
 		sync.Mutex{},
 	}
 }
 
+func (prog *Program) SetUpdateChan(updateChan chan<- ProgUpdate) {
+	prog.updateChan = updateChan
+}
+
 func (prog *Program) OnUpdate(t ProgUpdateType) {
-	if prog.UpdateChan != nil {
+	if prog.updateChan != nil {
 		//prog.Debug("prog.onUpdate()")
-		prog.UpdateChan <- ProgUpdate{
+		prog.updateChan <- ProgUpdate{
 			Prog: prog, Type: t,
 		}
 	}

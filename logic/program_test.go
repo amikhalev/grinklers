@@ -28,41 +28,41 @@ func makeSchedule() Schedule {
 }
 
 type ProgramSuite struct {
-	ass       *assert.Assertions
-	req       *require.Assertions
-	sec1      *MockSection
-	sec2      *MockSection
-	secRunner *SectionRunner
-	waitGroup *sync.WaitGroup
-	program   *Program
+	ass          *assert.Assertions
+	req          *require.Assertions
+	sections     []Section
+	secInterface *MockSectionInterface
+	secRunner    *SectionRunner
+	waitGroup    *sync.WaitGroup
+	program      *Program
 	suite.Suite
 }
 
 func (s *ProgramSuite) SetupSuite() {
-	s.ass = assert.New(s.T())
-	s.req = require.New(s.T())
-	s.waitGroup = &sync.WaitGroup{}
-}
-
-func (s *ProgramSuite) SetupTest() {
 	util.Logger.Out = ioutil.Discard
 	/*Logger.Out =*/ _ = os.Stdout
 	util.Logger.Level = logrus.DebugLevel
-	util.Logger.Warn("ayyyo")
-	s.sec1 = NewMockSection(0, "sec1", s.T())
-	s.sec2 = NewMockSection(1, "sec2", s.T())
-	s.secRunner = NewSectionRunner()
-	s.secRunner.Start(s.waitGroup)
+	s.sections = []Section{
+		Section{ID: 0, Name: "mock 0", InterfaceID: 0},
+		Section{ID: 1, Name: "mock 1", InterfaceID: 1},
+	}
+
+	s.ass = assert.New(s.T())
+	s.req = require.New(s.T())
+	s.waitGroup = &sync.WaitGroup{}
+	s.secInterface = NewMockSectionInterface(2)
 }
 
-func (s *ProgramSuite) SetupSecs() {
-	s.sec1.SetupReturns()
-	s.sec2.SetupReturns()
+func (s *ProgramSuite) SetupTest() {
+	s.secInterface.Initialize()
+	s.secRunner = NewSectionRunner(s.secInterface)
+	s.secRunner.Start(s.waitGroup)
 }
 
 func (s *ProgramSuite) TearDownTest() {
 	s.secRunner.Quit()
 	s.waitGroup.Wait()
+	s.secInterface.Deinitialize()
 }
 
 func (s *ProgramSuite) TestProgram_Run() {
@@ -71,19 +71,19 @@ func (s *ProgramSuite) TestProgram_Run() {
 	onUpdate := make(chan ProgUpdate, 10)
 
 	prog := NewProgram("test_run", []ProgItem{
-		{s.sec1, 10 * time.Millisecond},
-		{s.sec2, 10 * time.Millisecond},
+		{&s.sections[0], 10 * time.Millisecond},
+		{&s.sections[1], 10 * time.Millisecond},
 	}, Schedule{}, false)
-	prog.UpdateChan = onUpdate
+	prog.SetUpdateChan(onUpdate)
 	prog.Start(secRunner, s.waitGroup)
 
-	s.sec1.On("SetState", true).Return().
+	s.secInterface.On("Set", (SectionID)(0), true).Return().
 		Run(func(_ mock.Arguments) {
-			s.sec1.On("SetState", false).Return().
+			s.secInterface.On("Set", (SectionID)(0), false).Return().
 				Run(func(_ mock.Arguments) {
-					s.sec2.On("SetState", true).Return().
+					s.secInterface.On("Set", (SectionID)(1), true).Return().
 						Run(func(_ mock.Arguments) {
-							s.sec2.On("SetState", false).Return()
+							s.secInterface.On("Set", (SectionID)(1), false).Return()
 						})
 				})
 		})
@@ -100,19 +100,18 @@ func (s *ProgramSuite) TestProgram_Run() {
 	ass.Equal(ProgUpdateRunning, p.Type)
 	ass.Equal(false, prog.Running())
 
-	s.sec1.AssertExpectations(s.T())
-	s.sec2.AssertExpectations(s.T())
+	s.secInterface.AssertExpectations(s.T())
 
 	prog.Quit()
 }
 
 func (s *ProgramSuite) TestProgram_Schedule() {
 	ass, secRunner := s.ass, s.secRunner
-	s.SetupSecs()
+	s.secInterface.SetupAllReturns()
 
 	prog := NewProgram("test_schedule", []ProgItem{
-		{s.sec1, 25 * time.Millisecond},
-		{s.sec2, 25 * time.Millisecond},
+		{&s.sections[0], 25 * time.Millisecond},
+		{&s.sections[1], 25 * time.Millisecond},
 	}, makeSchedule(), true)
 	prog.Start(secRunner, s.waitGroup)
 
@@ -126,11 +125,11 @@ func (s *ProgramSuite) TestProgram_Schedule() {
 
 func (s *ProgramSuite) TestProgram_OnUpdate() {
 	ass, secRunner := s.ass, s.secRunner
-	s.SetupSecs()
+	s.secInterface.SetupAllReturns()
 
 	prog := NewProgram("test_onupdate", []ProgItem{
-		{s.sec1, 25 * time.Millisecond},
-		{s.sec2, 25 * time.Millisecond},
+		{&s.sections[0], 25 * time.Millisecond},
+		{&s.sections[1], 25 * time.Millisecond},
 	}, makeSchedule(), true)
 	prog.Start(secRunner, s.waitGroup)
 
@@ -144,11 +143,11 @@ func (s *ProgramSuite) TestProgram_OnUpdate() {
 
 func (s *ProgramSuite) TestProgram_DoubleRun() {
 	ass, secRunner := s.ass, s.secRunner
-	s.SetupSecs()
+	s.secInterface.SetupAllReturns()
 
 	prog := NewProgram("test_doublerun", []ProgItem{
-		{s.sec1, 25 * time.Millisecond},
-		{s.sec2, 25 * time.Millisecond},
+		{&s.sections[0], 25 * time.Millisecond},
+		{&s.sections[1], 25 * time.Millisecond},
 	}, Schedule{}, false)
 	prog.Start(secRunner, s.waitGroup)
 
@@ -161,17 +160,16 @@ func (s *ProgramSuite) TestProgram_DoubleRun() {
 
 	prog.Quit()
 
-	s.sec1.AssertNumberOfCalls(s.T(), "SetState", 2)
-	s.sec1.AssertNumberOfCalls(s.T(), "SetState", 2)
+	s.secInterface.AssertNumberOfCalls(s.T(), "Set", 4)
 }
 
 func (s *ProgramSuite) TestProgram_Cancel() {
 	ass, secRunner := s.ass, s.secRunner
-	s.SetupSecs()
+	s.secInterface.SetupAllReturns()
 
 	prog := NewProgram("test_cancel", []ProgItem{
-		{s.sec1, 25 * time.Millisecond},
-		{s.sec2, 25 * time.Millisecond},
+		{&s.sections[0], 25 * time.Millisecond},
+		{&s.sections[1], 25 * time.Millisecond},
 	}, Schedule{}, false)
 	prog.Start(secRunner, nil)
 
@@ -185,24 +183,23 @@ func (s *ProgramSuite) TestProgram_Cancel() {
 
 	prog.Quit()
 
-	s.sec1.AssertNumberOfCalls(s.T(), "SetState", 2)
-	s.sec2.AssertNumberOfCalls(s.T(), "SetState", 0)
+	s.secInterface.AssertNumberOfCalls(s.T(), "Set", 2)
 }
 
 func (s *ProgramSuite) TestProgram_SectionCancelled() {
 	ass, secRunner := s.ass, s.secRunner
-	s.SetupSecs()
+	s.secInterface.SetupAllReturns()
 
 	prog := NewProgram("test_section_cancelled", []ProgItem{
-		{s.sec1, 25 * time.Millisecond},
-		{s.sec2, 25 * time.Millisecond},
+		{&s.sections[0], 25 * time.Millisecond},
+		{&s.sections[1], 25 * time.Millisecond},
 	}, Schedule{}, false)
 	prog.Start(secRunner, nil)
 
 	prog.Run()
 	time.Sleep(15 * time.Millisecond)
 	ass.Equal(true, prog.Running())
-	s.secRunner.CancelSection(s.sec2)
+	s.secRunner.CancelSection(&s.sections[1])
 	time.Sleep(15 * time.Millisecond)
 	secRunner.State.Lock()
 	ass.Nil(secRunner.State.Current)
@@ -212,8 +209,7 @@ func (s *ProgramSuite) TestProgram_SectionCancelled() {
 
 	prog.Quit()
 
-	s.sec1.AssertNumberOfCalls(s.T(), "SetState", 2)
-	s.sec2.AssertNumberOfCalls(s.T(), "SetState", 0)
+	s.secInterface.AssertNumberOfCalls(s.T(), "Set", 2)
 }
 
 func TestProgramSuite(t *testing.T) {

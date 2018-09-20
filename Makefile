@@ -7,10 +7,10 @@ GO               ?=go
 RSYNC            ?=rsync
 RSYNC_FLAGS      ?=-rv --partial --progress
 
-SERVER_PACKAGE   :=./server
-SERVER_BINARY    :=./grinklers
-CLIENT_PACKAGE   :=./client
-CLIENT_BINARY    :=./grinklers_client
+SERVER_PACKAGE   :=./grinklers_server
+SERVER_BINARY    :=./grinklers_server/grinklers_server
+CLIENT_PACKAGE   :=./grinklers_client
+CLIENT_BINARY    :=./grinklers_client/grinklers_client
 
 GO_TOP			 :=git.amikhalev.com/amikhalev/grinklers
 GO_PACKAGES      :=$(shell go list ./...)

@@ -5,8 +5,8 @@
 coverage.out
 /coverage.all.out
 /coverage.html
-/grinklers
-/grinklers_client
+/grinklers_server/grinklers_server
+/grinklers_client/grinklers_client
 /rpi_deploy
 *.iml
 .env

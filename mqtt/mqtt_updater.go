@@ -25,10 +25,10 @@ func NewMQTTUpdater(config *config.ConfigData, sectionRunner *logic.SectionRunne
 	onSectionRunnerUpdate := make(chan *logic.SRState, 10)
 	stop := make(chan int)
 	for i := range config.Sections {
-		config.Sections[i].SetOnUpdate(onSectionUpdate)
+		config.Sections[i].SetUpdateChan(onSectionUpdate)
 	}
 	for i := range config.Programs {
-		config.Programs[i].UpdateChan = onProgramUpdate
+		config.Programs[i].SetUpdateChan(onProgramUpdate)
 	}
 	sectionRunner.OnUpdateState = onSectionRunnerUpdate
 	return &MQTTUpdater{
@@ -56,30 +56,20 @@ func (u *MQTTUpdater) run() {
 		//logger.Debug("waiting for update")
 		select {
 		case <-u.stop:
+			u.logger.Debug("stopping updater")
 			return
 		case secUpdate := <-u.onSectionUpdate:
 			//logger.Debug("sec update")
-			util.ExhaustChan(u.onSectionUpdate)
-
-			index := -1
-			for i, s := range u.config.Sections {
-				if s == secUpdate.Sec {
-					index = i
-				}
-			}
-			if index == -1 {
-				u.logger.Panicf("invalid section update recieved: %v", secUpdate.Sec)
-			}
 
 			var err error
 			switch secUpdate.Type {
 			case logic.SecUpdateData:
-				err = u.api.UpdateSectionData(index, secUpdate.Sec)
+				err = u.api.UpdateSectionData(secUpdate.Sec)
 				if err == nil {
 					err = config.WriteConfig(u.config)
 				}
 			case logic.SecUpdateState:
-				err = u.api.UpdateSectionState(index, secUpdate.Sec)
+				err = u.api.UpdateSectionState(secUpdate.Sec)
 			default:
 			}
 			if err != nil {

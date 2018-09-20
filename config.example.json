@@ -1,28 +1,32 @@
 {
+  "SectionInterface": {
+    "type": "rpio",
+    "pins": [23, 17, 21, 22, 25, 24]
+  },
   "sections": [
     {
       "name": "Front Yard Middle",
-      "pin": 23
+      "interfaceId": 0
     },
     {
       "name": "Front Yard Left",
-      "pin": 17
+      "interfaceId": 1
     },
     {
       "name": "Front Yard Right",
-      "pin": 21
+      "interfaceId": 2
     },
     {
       "name": "Back Yard Middle",
-      "pin": 22
+      "interfaceId": 3
     },
     {
       "name": "Back Yard Sauna",
-      "pin": 25
+      "interfaceId": 4
     },
     {
       "name": "Garden",
-      "pin": 24
+      "interfaceId": 5
     }
   ],
   "programs": [

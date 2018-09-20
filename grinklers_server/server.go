@@ -8,33 +8,36 @@ import (
 	c "git.amikhalev.com/amikhalev/grinklers/config"
 	l "git.amikhalev.com/amikhalev/grinklers/logic"
 	"git.amikhalev.com/amikhalev/grinklers/mqtt"
+	"git.amikhalev.com/amikhalev/grinklers/util"
 	log "github.com/Sirupsen/logrus"
 	"github.com/joho/godotenv"
 )
 
 func main() {
+	util.Logger.Level = log.DebugLevel
+	var logger = util.Logger.WithField("module", "server")
 	// channel which is notified on an interrupt signal
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, os.Kill)
 
 	godotenv.Load()
 
-	err := l.RpioSectionInit()
-	if err != nil {
-		log.WithError(err).Fatalf("error initializing sections")
-	}
-
 	config, err := c.LoadConfig()
 	if err != nil {
-		log.WithError(err).Fatalf("error loading config")
+		logger.WithError(err).Fatalf("error loading config")
 	}
 
-	log.Info("writing back config")
+	logger.Info("writing back config")
 	c.WriteConfig(&config)
+
+	err = config.SectionInterface.Initialize()
+	if err != nil {
+		logger.WithError(err).Fatalf("error initializing sections")
+	}
 
 	waitGroup := sync.WaitGroup{}
 
-	secRunner := l.NewSectionRunner()
+	secRunner := l.NewSectionRunner(config.SectionInterface)
 	secRunner.Start(&waitGroup)
 
 	sections := config.Sections
@@ -42,11 +45,11 @@ func main() {
 
 	updater := mqtt.NewMQTTUpdater(&config, secRunner)
 
-	log.Debug("initializing sections and programs")
+	logger.Debug("initializing sections and programs")
 
 	stopAll := func() {
 		for i := range sections {
-			sections[i].SetState(false)
+			sections[i].SetState(false, config.SectionInterface)
 		}
 	}
 	stopAll()
@@ -55,7 +58,7 @@ func main() {
 		programs[i].Start(secRunner, &waitGroup)
 	}
 
-	log.WithFields(log.Fields{
+	logger.WithFields(log.Fields{
 		"lenSections": len(sections), "lenPrograms": len(programs),
 	}).Info("initialized sections and programs")
 
@@ -66,7 +69,7 @@ func main() {
 
 	<-sigc
 
-	log.Info("cleaning up...")
+	logger.Info("cleaning up...")
 	updater.Stop()
 	api.Stop()
 	for i := range programs {
@@ -75,5 +78,5 @@ func main() {
 	secRunner.Quit()
 	waitGroup.Wait()
 	stopAll()
-	l.RpioSectionCleanup()
+	config.SectionInterface.Deinitialize()
 }

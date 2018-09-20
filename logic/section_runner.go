@@ -7,36 +7,18 @@ import (
 	"sync"
 	"sync/atomic"
 
-	. "git.amikhalev.com/amikhalev/grinklers/util"
+	"git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/Sirupsen/logrus"
 )
 
-const SR_ID_ALL = -1
-
-// SectionRunJSON is the JSON representation of a SectionRun
-type SectionRunJSON struct {
-	ID            int32      `json:"id"`
-	Section       int        `json:"section"`
-	TotalDuration float64    `json:"totalDuration"`
-	Duration      float64    `json:"duration"`
-	StartTime     *time.Time `json:"startTime"`
-	PauseTime     *time.Time `json:"pauseTime"`
-	UnpauseTime   *time.Time `json:"unpauseTime"`
-}
-
-// SRStateJSON is the JSON representation of a SRState
-type SRStateJSON struct {
-	Queue   []SectionRunJSON `json:"queue"`
-	Current *SectionRunJSON  `json:"current"`
-	Paused  bool             `json:"paused"`
-}
+const srIDAll = -1
 
 // SectionRun is a single run of a section for a duration that is either queued, or currently running
 type SectionRun struct {
 	// RunID is a sequential unique identifier of SectionRuns
 	RunID int32
 	// Sec is the section that should be run
-	Sec Section
+	Sec *Section
 	// Duration is the total duration the section is to run for
 	TotalDuration time.Duration
 	// Duration is the remaining duration the section is to run for. This should equal TotalDuration unless the section
@@ -55,7 +37,7 @@ type SectionRun struct {
 }
 
 // NewSectionRun creates a new SectionRun
-func NewSectionRun(runID int32, sec Section, duration time.Duration, doneChan chan<- bool) SectionRun {
+func NewSectionRun(runID int32, sec *Section, duration time.Duration, doneChan chan<- bool) SectionRun {
 	return SectionRun{
 		runID, sec, duration, duration, doneChan,
 		nil, nil, nil,
@@ -66,27 +48,7 @@ func (sr *SectionRun) String() string {
 	if sr == nil {
 		return "nil"
 	}
-	return fmt.Sprintf("{'%s' for %v}", sr.Sec.Name(), sr.Duration)
-}
-
-// ToJSON returns an the JSON representation of this SectionRun, or err if there was some error.
-// sections is a slice of the sections (in order to compute the section index)
-func (sr *SectionRun) ToJSON(sections []Section) (j SectionRunJSON, err error) {
-	secID := -1
-	for i, sec := range sections {
-		if sr.Sec == sec {
-			secID = i
-		}
-	}
-	if secID == -1 {
-		err = fmt.Errorf("the section of this program does not exist in the sections array")
-		return
-	}
-	j = SectionRunJSON{
-		sr.RunID, secID, sr.TotalDuration.Seconds(), sr.Duration.Seconds(),
-		sr.StartTime, sr.PauseTime, sr.UnpauseTime,
-	}
-	return
+	return fmt.Sprintf("{'%s' for %v}", sr.Sec.Name, sr.Duration)
 }
 
 // SRQueue is a queue for SectionRuns. It is implemented as a circular buffer that doubles in length when it fills up
@@ -96,7 +58,7 @@ type SRQueue struct {
 	tail  int
 }
 
-func newSRQueue(size int) SRQueue {
+func NewSRQueue(size int) SRQueue {
 	return SRQueue{
 		make([]*SectionRun, size),
 		0, 0,
@@ -118,23 +80,6 @@ func (q SRQueue) Format(f fmt.State, c rune) {
 }
 
 var _ fmt.Formatter = (*SRQueue)(nil)
-
-// ToJSON returns the JSON representation of this SRQueue, or err if there was an error.
-// See SectionRun#toJSON
-func (q *SRQueue) ToJSON(sections []Section) (slice []SectionRunJSON, err error) {
-	slice = nil
-	var json SectionRunJSON
-	for i := q.head; i != q.tail; i = (i + 1) % len(q.items) {
-		if q.items[i] != nil {
-			json, err = q.items[i].ToJSON(sections)
-			if err != nil {
-				return
-			}
-			slice = append(slice, json)
-		}
-	}
-	return
-}
 
 // Push adds an item to the end of the SrQueue, expanding it if necessary
 func (q *SRQueue) Push(item *SectionRun) {
@@ -165,6 +110,27 @@ func (q *SRQueue) Pop() *SectionRun {
 	return item
 }
 
+func (q *SRQueue) ForEach(f func(*SectionRun) bool) bool {
+	for i := q.head; i != q.tail; i = (i + 1) % len(q.items) {
+		item := q.items[i]
+		if item != nil {
+			result := f(item)
+			if !result {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (q *SRQueue) ToSlice() (a []SectionRun) {
+	q.ForEach(func(sr *SectionRun) bool {
+		a = append(a, *sr)
+		return true
+	})
+	return
+}
+
 // Len gets the current number of items in the SrQueue
 func (q *SRQueue) Len() int {
 	count := 0
@@ -177,7 +143,7 @@ func (q *SRQueue) Len() int {
 }
 
 // RemoveWithSection removes all items from the queue that are runs with the specified section
-func (q *SRQueue) RemoveWithSection(sec Section) (removed []*SectionRun) {
+func (q *SRQueue) RemoveWithSection(sec *Section) (removed []*SectionRun) {
 	removed = make([]*SectionRun, 0)
 	checkAndRemove := func(i int) {
 		if q.items[i] != nil && q.items[i].Sec == sec {
@@ -228,28 +194,10 @@ type SRState struct {
 	sync.Mutex // gives it Lock() and Unlock methods
 }
 
-func newSRState() SRState {
+func NewSRState() SRState {
 	return SRState{
-		newSRQueue(10), nil, false, sync.Mutex{},
+		NewSRQueue(10), nil, false, sync.Mutex{},
 	}
-}
-
-// ToJSON returns the JSON representation of a SRState, or an error
-func (s *SRState) ToJSON(sections []Section) (json SRStateJSON, err error) {
-	json = SRStateJSON{}
-	json.Queue, err = s.Queue.ToJSON(sections)
-	if err != nil {
-		return
-	}
-	if s.Current != nil {
-		var current SectionRunJSON
-		current, err = s.Current.ToJSON(sections)
-		json.Current = &current
-	} else {
-		json.Current = nil
-	}
-	json.Paused = s.Paused
-	return
 }
 
 func (s *SRState) String() string {
@@ -258,8 +206,9 @@ func (s *SRState) String() string {
 
 // SectionRunner runs a queue of sections
 type SectionRunner struct {
+	secInterface  SectionInterface
 	run           chan SectionRun
-	cancelSec     chan Section
+	cancelSec     chan *Section
 	cancelID      chan int32
 	paused        chan bool
 	quit          chan struct{}
@@ -270,12 +219,18 @@ type SectionRunner struct {
 }
 
 // NewSectionRunner creates a new SectionRunner without starting it
-func NewSectionRunner() *SectionRunner {
+func NewSectionRunner(secInterface SectionInterface) *SectionRunner {
 	return &SectionRunner{
-		make(chan SectionRun, 2), make(chan Section, 2), make(chan int32, 2),
-		make(chan bool, 2), make(chan struct{}),
-		0, newSRState(), nil,
-		Logger.WithField("module", "SectionRunner"),
+		secInterface,
+		make(chan SectionRun, 2),
+		make(chan *Section, 2),
+		make(chan int32, 2),
+		make(chan bool, 2),
+		make(chan struct{}),
+		0,
+		NewSRState(),
+		nil,
+		util.Logger.WithField("module", "SectionRunner"),
 	}
 }
 
@@ -300,12 +255,12 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 			delay = nil
 			state.Current.PauseTime = &startTime
 		} else {
-			state.Current.Sec.SetState(true)
+			state.Current.Sec.SetState(true, r.secInterface)
 			delay = time.After(state.Current.Duration)
 		}
 	}
 	finishRun := func(cancelled bool) {
-		state.Current.Sec.SetState(false)
+		state.Current.Sec.SetState(false, r.secInterface)
 		delay = nil
 		if state.Current.Done != nil {
 			state.Current.Done <- cancelled
@@ -350,12 +305,12 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 				runItem()
 			}
 			r.log.WithFields(logrus.Fields{
-				"state": state, "sec": sec.Name(),
+				"state": state, "sec": sec.Name,
 			}).Debug("cancelled section runs with section")
 			endUpdate()
 		case id := <-r.cancelID:
 			state.Lock()
-			if id == SR_ID_ALL {
+			if id == srIDAll {
 				fromQueue := state.Queue.RemoveAll()
 				for _, secRun := range fromQueue {
 					if secRun.Done != nil {
@@ -398,7 +353,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 					} else {
 						alreadyRunFor = now.Sub(*state.Current.StartTime)
 					}
-					state.Current.Sec.SetState(false)
+					state.Current.Sec.SetState(false, r.secInterface)
 					state.Current.PauseTime = &now
 					state.Current.Duration = state.Current.Duration - alreadyRunFor
 					delay = nil // so it never receives
@@ -418,7 +373,7 @@ func (r *SectionRunner) start(wait *sync.WaitGroup) {
 					delay = time.After(state.Current.Duration)
 					state.Current.PauseTime = nil
 					state.Current.UnpauseTime = &now
-					state.Current.Sec.SetState(true)
+					state.Current.Sec.SetState(true, r.secInterface)
 				} else {
 					state.Current = state.Queue.Pop()
 					runItem()
@@ -459,14 +414,14 @@ func (r *SectionRunner) getNextID() int32 {
 }
 
 // QueueSectionRun queues the specified Section to run for dur
-func (r *SectionRunner) QueueSectionRun(sec Section, dur time.Duration) (id int32) {
+func (r *SectionRunner) QueueSectionRun(sec *Section, dur time.Duration) (id int32) {
 	id = r.getNextID()
 	r.run <- NewSectionRun(id, sec, dur, nil)
 	return
 }
 
 // RunSectionAsync runs the section and returns a chan which recieves when the section is finished running
-func (r *SectionRunner) RunSectionAsync(sec Section, dur time.Duration) (id int32, done <-chan bool) {
+func (r *SectionRunner) RunSectionAsync(sec *Section, dur time.Duration) (id int32, done <-chan bool) {
 	id = r.getNextID()
 	doneChan := make(chan bool, 1)
 	r.run <- NewSectionRun(id, sec, dur, doneChan)
@@ -475,13 +430,13 @@ func (r *SectionRunner) RunSectionAsync(sec Section, dur time.Duration) (id int3
 }
 
 // RunSection runs the section and returns when the section is finished running
-func (r *SectionRunner) RunSection(sec Section, dur time.Duration) {
+func (r *SectionRunner) RunSection(sec *Section, dur time.Duration) {
 	_, done := r.RunSectionAsync(sec, dur)
 	<-done
 }
 
 // CancelSection cancels all runs for the specified Section
-func (r *SectionRunner) CancelSection(sec Section) {
+func (r *SectionRunner) CancelSection(sec *Section) {
 	r.cancelSec <- sec
 }
 
@@ -492,7 +447,7 @@ func (r *SectionRunner) CancelID(id int32) {
 
 // CancelAll cancels all section runs
 func (r *SectionRunner) CancelAll() {
-	r.cancelID <- SR_ID_ALL
+	r.cancelID <- srIDAll
 }
 
 // Pause pauses the currently running section run (if any) and stops processing the section run queue
