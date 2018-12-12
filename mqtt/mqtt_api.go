@@ -13,7 +13,7 @@ import (
 	"git.amikhalev.com/amikhalev/grinklers/logic"
 	"git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/Sirupsen/logrus"
-	"github.com/eclipse/paho.mqtt.golang"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 const CONNECT_RETRY_TIMEOUT = 10 * time.Second
@@ -62,6 +62,9 @@ func (a *MQTTApi) createMQTTOpts() (opts *mqtt.ClientOptions) {
 	} else {
 		a.prefix = "grinklers"
 	}
+	if a.prefix[0] == '/' {
+		a.prefix = a.prefix[1:]
+	}
 	a.logger.Debugf("broker prefix: '%s'", a.prefix)
 
 	cid := os.Getenv("MQTT_CID")
@@ -77,7 +80,7 @@ func (a *MQTTApi) createMQTTOpts() (opts *mqtt.ClientOptions) {
 		password, _ := brokerURI.User.Password()
 		opts.SetPassword(password)
 		a.logger.WithFields(logrus.Fields{
-			"username": username, "password": password,
+			"username": username,
 		}).Debug("authenticating to mqtt server")
 	}
 	opts.SetClientID(cid)
