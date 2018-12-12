@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
 	"git.amikhalev.com/amikhalev/grinklers/config"
 	"git.amikhalev.com/amikhalev/grinklers/datamodel"
+	"git.amikhalev.com/amikhalev/grinklers/http"
 	"git.amikhalev.com/amikhalev/grinklers/logic"
 	"git.amikhalev.com/amikhalev/grinklers/util"
 	"github.com/Sirupsen/logrus"
@@ -40,12 +40,8 @@ func NewMQTTApi(config *config.ConfigData, secRunner *logic.SectionRunner) *MQTT
 	}
 }
 
-func (a *MQTTApi) createMQTTOpts() (opts *mqtt.ClientOptions) {
-	broker := os.Getenv("MQTT_BROKER")
-	if broker == "" {
-		broker = "tcp://localhost:1883"
-	}
-	brokerURI, err := url.Parse(broker)
+func (a *MQTTApi) createMQTTOpts(connectData *http.ConnectData) (opts *mqtt.ClientOptions) {
+	brokerURI, err := url.Parse(connectData.MqttURL)
 	if err != nil {
 		err = fmt.Errorf("error parsing MQTT_BROKER: %v", err)
 		return
@@ -57,40 +53,24 @@ func (a *MQTTApi) createMQTTOpts() (opts *mqtt.ClientOptions) {
 	} else if brokerURI.Scheme == "" {
 		brokerURI.Scheme = "tcp"
 	}
-	if brokerURI.Path != "" {
-		a.prefix = brokerURI.Path
-	} else {
-		a.prefix = "grinklers"
-	}
-	if a.prefix[0] == '/' {
-		a.prefix = a.prefix[1:]
-	}
+	a.prefix = "device/" + connectData.DeviceID
 	a.logger.Debugf("broker prefix: '%s'", a.prefix)
-
-	cid := os.Getenv("MQTT_CID")
-	if cid == "" {
-		cid = "grinklers-1"
-	}
 
 	opts = mqtt.NewClientOptions()
 	opts.AddBroker(brokerURI.String())
-	if brokerURI.User != nil {
-		username := brokerURI.User.Username()
-		opts.SetUsername(username)
-		password, _ := brokerURI.User.Password()
-		opts.SetPassword(password)
-		a.logger.WithFields(logrus.Fields{
-			"username": username,
-		}).Debug("authenticating to mqtt server")
-	}
-	opts.SetClientID(cid)
+	opts.SetUsername(connectData.DeviceID)
+	opts.SetPassword(connectData.DeviceToken)
+	a.logger.WithFields(logrus.Fields{
+		"username": connectData.DeviceID,
+	}).Debug("authenticating to mqtt server")
+	opts.SetClientID(connectData.ClientID)
 	opts.SetCleanSession(false)
 	return
 }
 
 // Start connects to the MQTT broker and listens to the API topics
-func (a *MQTTApi) Start() (err error) {
-	opts := a.createMQTTOpts()
+func (a *MQTTApi) Start(connectData *http.ConnectData) (err error) {
+	opts := a.createMQTTOpts(connectData)
 	opts.SetWill(a.prefix+"/connected", "false", 1, true)
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		a.logger.Info("connected to mqtt broker")

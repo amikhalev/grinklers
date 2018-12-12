@@ -5,6 +5,8 @@ import (
 	"os/signal"
 	"sync"
 
+	"git.amikhalev.com/amikhalev/grinklers/http"
+
 	c "git.amikhalev.com/amikhalev/grinklers/config"
 	l "git.amikhalev.com/amikhalev/grinklers/logic"
 	"git.amikhalev.com/amikhalev/grinklers/mqtt"
@@ -13,9 +15,10 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var logger = util.Logger.WithField("module", "server")
+
 func main() {
-	util.Logger.Level = log.DebugLevel
-	var logger = util.Logger.WithField("module", "server")
+	util.InitLogLevel()
 	// channel which is notified on an interrupt signal
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, os.Kill)
@@ -26,9 +29,6 @@ func main() {
 	if err != nil {
 		logger.WithError(err).Fatalf("error loading config")
 	}
-
-	logger.Info("writing back config")
-	c.WriteConfig(&config)
 
 	err = config.SectionInterface.Initialize()
 	if err != nil {
@@ -42,8 +42,6 @@ func main() {
 
 	sections := config.Sections
 	programs := config.Programs
-
-	updater := mqtt.NewMQTTUpdater(&config, secRunner)
 
 	logger.Debug("initializing sections and programs")
 
@@ -62,8 +60,31 @@ func main() {
 		"lenSections": len(sections), "lenPrograms": len(programs),
 	}).Info("initialized sections and programs")
 
+	// httpConfig := &http.Config{ApiURL: apiUrl, DeviceRegistrationToken: deviceRegToken}
+	httpConfig := config.HTTPConfig
+	httpApiClient := http.NewAPIClient(httpConfig)
+	if config.DeviceData == nil {
+		err = httpApiClient.Register()
+		if err != nil {
+			logger.WithError(err).Error("error registering device")
+		} else {
+			config.DeviceData = httpApiClient.Device
+		}
+	}
+
+	logger.Info("writing back config")
+	c.WriteConfig(&config)
+
+	httpApiClient.Device = config.DeviceData
+	connectData, err := httpApiClient.Connect()
+	if err != nil {
+		logger.WithError(err).Error("error connecting device")
+	}
+
 	api := mqtt.NewMQTTApi(&config, secRunner)
-	api.Start()
+	api.Start(connectData)
+
+	updater := mqtt.NewMQTTUpdater(&config, secRunner)
 
 	updater.Start(api)
 

@@ -6,12 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/eclipse/paho.mqtt.golang"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 var (
@@ -186,16 +185,6 @@ func (c *GrinklersClient) GetSections() ([]Section, error) {
 		}
 	}
 	return sections, nil
-}
-
-func init() {
-	level := os.Getenv("LOG_LEVEL")
-	if level != "" {
-		lvl, err := log.ParseLevel(level)
-		if err == nil {
-			log.SetLevel(lvl)
-		}
-	}
 }
 
 func createMqttOptions(mqttUrl *url.URL) *mqtt.ClientOptions {

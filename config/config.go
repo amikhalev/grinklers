@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 
+	"git.amikhalev.com/amikhalev/grinklers/http"
+
 	"git.amikhalev.com/amikhalev/grinklers/datamodel"
 	"git.amikhalev.com/amikhalev/grinklers/logic"
 	"git.amikhalev.com/amikhalev/grinklers/util"
@@ -19,6 +21,8 @@ type ConfigData struct {
 	SectionInterface logic.SectionInterface
 	Sections         []logic.Section
 	Programs         []*logic.Program
+	HTTPConfig       *http.Config
+	DeviceData       *http.DeviceData
 }
 
 // ToJSON converts a ConfigData to a ConfigDataJSON
@@ -27,6 +31,8 @@ func (c *ConfigData) ToJSON() (j ConfigDataJSON) {
 	j.SectionInterface = SectionInterfaceJSON{Pins: c.Pins}
 	j.Sections = c.Sections
 	j.Programs = datamodel.ProgramsToJSON(c.Programs)
+	j.HTTPConfig = c.HTTPConfig
+	j.DeviceData = c.DeviceData
 	return
 }
 
@@ -52,6 +58,8 @@ type ConfigDataJSON struct {
 	SectionInterface SectionInterfaceJSON
 	Sections         logic.Sections         `json:"sections"`
 	Programs         datamodel.ProgramsJSON `json:"programs"`
+	HTTPConfig       *http.Config
+	DeviceData       *http.DeviceData
 }
 
 // ToConfigData converts a ConfigDataJSON to a ConfigData
@@ -63,7 +71,14 @@ func (j *ConfigDataJSON) ToConfigData() (c ConfigData, err error) {
 	c.Programs, err = j.Programs.ToPrograms(c.Sections)
 	if err != nil {
 		err = fmt.Errorf("invalid programs json: %v", err)
+		return
 	}
+	if j.HTTPConfig == nil {
+		err = fmt.Errorf("no HTTPConfig specified")
+		return
+	}
+	c.HTTPConfig = j.HTTPConfig
+	c.DeviceData = j.DeviceData
 	return
 }
 
