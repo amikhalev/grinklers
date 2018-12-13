@@ -11,7 +11,7 @@ func InitLogLevel() {
 	if level != "" {
 		lvl, err := logrus.ParseLevel(level)
 		if err == nil {
-			logrus.SetLevel(lvl)
+			Logger.SetLevel(lvl)
 		}
 	}
 }
